@@ -1,0 +1,19 @@
+{
+  "name": "triagent",
+  "version": "0.1.0",
+  "description": "Local Codex, Hermes, and Antigravity orchestration dashboard.",
+  "type": "module",
+  "bin": {
+    "triagent": "./bin/triagent.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node ./bin/triagent.js dashboard"
+  },
+  "engines": {
+    "node": ">=23.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}

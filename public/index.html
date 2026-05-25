@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Triagent Observer</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <header class="topbar">
+          <div>
+            <h1>Triagent</h1>
+            <p>只读观察台</p>
+          </div>
+          <span id="connection" class="badge">connecting</span>
+        </header>
+        <section id="tasks" class="task-list" aria-label="任务列表"></section>
+      </aside>
+      <section class="workspace">
+        <header class="detail-header">
+          <div>
+            <p id="selected-agent" class="meta">未选择任务</p>
+            <h2 id="selected-title">等待子agent任务</h2>
+          </div>
+          <span id="selected-status" class="status">idle</span>
+        </header>
+        <section class="panes">
+          <article class="pane">
+            <h3>任务包</h3>
+            <pre id="task-packet" class="terminal muted">选择左侧任务后显示</pre>
+          </article>
+          <article class="pane output-pane">
+            <h3>原始输出</h3>
+            <pre id="events" class="terminal"></pre>
+          </article>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
