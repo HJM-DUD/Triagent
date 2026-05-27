@@ -10,6 +10,8 @@ export class TriagentStore {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA foreign_keys = ON;");
+    this.db.exec("PRAGMA journal_mode = WAL;");
+    this.db.exec("PRAGMA busy_timeout = 3000;");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
@@ -104,6 +106,24 @@ export class TriagentStore {
       .run(status, exitCode, now, now, taskId);
   }
 
+  updateTaskStatus(taskId, status) {
+    const now = new Date().toISOString();
+    this.db
+      .prepare("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?")
+      .run(status, now, taskId);
+  }
+
+  addCodexNote(taskId, content) {
+    const event = this.appendEvent({
+      taskId,
+      agent: "codex",
+      stream: "note",
+      content
+    });
+    this.updateTaskStatus(taskId, "codex_reviewed");
+    return event;
+  }
+
   markTaskCreatedAt(taskId, createdAt) {
     this.db
       .prepare("UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?")
@@ -127,6 +147,41 @@ export class TriagentStore {
          LIMIT ?`
       )
       .all(limit);
+  }
+
+  getTask(taskId) {
+    return this.db
+      .prepare(
+        `SELECT id, mode, agent, cwd, title, status, task_packet AS taskPacket,
+                exit_code AS exitCode, created_at AS createdAt,
+                updated_at AS updatedAt, finished_at AS finishedAt
+         FROM tasks
+         WHERE id = ?`
+      )
+      .get(taskId);
+  }
+
+  listChangesSince(sinceIso) {
+    const tasks = this.db
+      .prepare(
+        `SELECT id, mode, agent, cwd, title, status, task_packet AS taskPacket,
+                exit_code AS exitCode, created_at AS createdAt,
+                updated_at AS updatedAt, finished_at AS finishedAt
+         FROM tasks
+         WHERE updated_at > ?
+         ORDER BY updated_at ASC`
+      )
+      .all(sinceIso);
+    const events = this.db
+      .prepare(
+        `SELECT id, task_id AS taskId, agent, stream, content, created_at AS createdAt
+         FROM events
+         WHERE created_at > ?
+         ORDER BY created_at ASC`
+      )
+      .all(sinceIso);
+
+    return { tasks, events };
   }
 
   listEvents(taskId) {

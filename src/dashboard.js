@@ -11,7 +11,11 @@ const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 
 export function startDashboard({ host = "127.0.0.1", port = 8765, dbPath = defaultDbPath() } = {}) {
   const server = createServer((req, res) => {
-    routeRequest({ req, res, dbPath });
+    try {
+      routeRequest({ req, res, dbPath });
+    } catch (error) {
+      sendJson(res, { error: error.message }, 500);
+    }
   });
   const wss = new WebSocketServer({ server, path: "/ws" });
 
@@ -66,8 +70,8 @@ function routeRequest({ req, res, dbPath }) {
   serveStatic(url.pathname, res);
 }
 
-function sendJson(res, data) {
-  res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+function sendJson(res, data, statusCode = 200) {
+  res.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
 }
 

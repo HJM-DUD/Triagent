@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 
 import { buildAgentCommand, buildAllDiscussionPlan, buildTaskPacket, resolveAntigravityCommand } from "./commands.js";
 import { defaultDbPath } from "./paths.js";
+import { assertSafeTaskPacket } from "./safety.js";
 import { TriagentStore } from "./store.js";
 
 export const bus = new EventEmitter();
@@ -29,6 +30,7 @@ export async function runSingleAgent({
 }) {
   const normalizedAgent = agent === "antigravity" ? "ant" : agent;
   const packet = taskPacket || buildTaskPacket({ goal, cwd, edit });
+  assertSafeTaskPacket(packet);
   const command = buildAgentCommand({
     agent: normalizedAgent,
     taskPacket: packet,
@@ -58,6 +60,9 @@ export async function runSingleAgent({
 
 export async function runAllDiscussion({ goal, cwd = process.cwd(), store = openStore() }) {
   const phases = buildAllDiscussionPlan(goal, cwd);
+  for (const phase of phases) {
+    assertSafeTaskPacket(phase.taskPacket);
+  }
   const task = store.createTask({
     mode: "all",
     agent: "all",

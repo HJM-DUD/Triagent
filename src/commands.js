@@ -62,12 +62,18 @@ export function buildTaskPacket({ goal, cwd = process.cwd(), allowedPaths = [], 
     `Edits allowed: ${edit ? "yes, only inside allowed paths" : "no"}`,
     `Allowed paths: ${paths}`,
     `Deletion rule: ${DELETE_RULE}`,
+    "Evidence ID rule: Every factual claim based on files, commands, logs, or web output must include an evidence ID like [E1]. If there is no evidence, say so clearly.",
     "Output format: 结论, 改了什么, 触碰文件, 运行命令, 验证结果, 风险/未完成, 需要 Codex 决策的问题."
   ].join("\n");
 }
 
 export function buildAllDiscussionPlan(goal, cwd = process.cwd()) {
-  const base = `Goal: ${goal}\nCurrent working directory: ${cwd}\nDeletion rule: ${DELETE_RULE}`;
+  const base = [
+    `Goal: ${goal}`,
+    `Current working directory: ${cwd}`,
+    `Deletion rule: ${DELETE_RULE}`,
+    "Evidence ID rule: Every factual claim based on files, commands, logs, or web output must include an evidence ID like [E1]."
+  ].join("\n");
   return [
     {
       agent: "codex",
@@ -77,12 +83,12 @@ export function buildAllDiscussionPlan(goal, cwd = process.cwd()) {
     {
       agent: "hermes",
       title: "Hermes local analysis",
-      taskPacket: `${base}\nAnalyze from local code, logs, cost, and mechanical feasibility. Do not edit files.`
+      taskPacket: `${base}\nAnalyze from local code, logs, cost, and mechanical feasibility. Do not edit files.\nFinish with a summary under 500 Chinese characters: core proposal points and potential risks.`
     },
     {
       agent: "ant",
       title: "Antigravity alternative analysis",
-      taskPacket: `${base}\nAnalyze alternatives, long-context concerns, UI/product implications, and Google ecosystem fit. Do not edit files.`
+      taskPacket: `${base}\nAnalyze alternatives, long-context concerns, UI/product implications, and Google ecosystem fit. Do not edit files.\nFinish with a summary under 500 Chinese characters: core proposal points and potential risks.`
     },
     {
       agent: "codex",
@@ -92,12 +98,12 @@ export function buildAllDiscussionPlan(goal, cwd = process.cwd()) {
     {
       agent: "hermes",
       title: "Hermes cross-check",
-      taskPacket: `${base}\nCross-check Codex and Antigravity proposals. Look for concrete implementation risks and missing verification.`
+      taskPacket: `${base}\nCross-check only the compact summary and evidence IDs from Codex and Antigravity, not their full Raw Log. Look for concrete implementation risks and missing verification.`
     },
     {
       agent: "ant",
       title: "Antigravity cross-check",
-      taskPacket: `${base}\nCross-check Codex and Hermes proposals. Look for product, UX, scale, and long-context issues.`
+      taskPacket: `${base}\nCross-check only the compact summary and evidence IDs from Codex and Hermes, not their full Raw Log. Look for product, UX, scale, and long-context issues.`
     },
     {
       agent: "codex",

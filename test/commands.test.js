@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildAgentCommand,
   buildAllDiscussionPlan,
+  buildTaskPacket,
   resolveAntigravityCommand
 } from "../src/commands.js";
 
@@ -55,4 +56,17 @@ test("/all discussion plan has deterministic phases", () => {
   ]);
   assert.match(phases[0].taskPacket, /Problem definition/);
   assert.match(phases.at(-1).taskPacket, /Final裁决/);
+  assert.match(phases[1].taskPacket, /500/);
+  assert.match(phases[4].taskPacket, /summary/i);
+  assert.doesNotMatch(phases[4].taskPacket, /完整.*Raw Log/);
+});
+
+test("task packets require evidence IDs in subagent output", () => {
+  const packet = buildTaskPacket({
+    goal: "Inspect project",
+    cwd: "/tmp/project"
+  });
+
+  assert.match(packet, /Evidence ID/);
+  assert.match(packet, /\[E1\]/);
 });

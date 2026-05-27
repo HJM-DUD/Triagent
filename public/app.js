@@ -1,5 +1,8 @@
 let tasks = [];
 let selectedId = null;
+let seenTaskIds = new Set();
+let lastEventText = "";
+let refreshTimer = null;
 
 const taskList = document.querySelector("#tasks");
 const connection = document.querySelector("#connection");
@@ -11,6 +14,7 @@ const eventsEl = document.querySelector("#events");
 
 connect();
 refreshTasks();
+startAutoRefresh();
 
 function connect() {
   const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
@@ -43,20 +47,30 @@ function connect() {
 }
 
 async function refreshTasks() {
-  const response = await fetch("/api/tasks");
-  const data = await response.json();
-  tasks = data.tasks;
-  renderTasks();
-  if (!selectedId && tasks[0]) {
-    selectTask(tasks[0].id);
+  try {
+    const response = await fetch("/api/tasks");
+    const data = await response.json();
+    tasks = data.tasks;
+    renderTasks();
+    if (!selectedId && tasks[0]) {
+      selectTask(tasks[0].id);
+    } else if (selectedId) {
+      refreshSelectedTask();
+    }
+  } catch {
+    connection.textContent = "reconnecting";
+    connection.className = "badge running";
   }
 }
 
 function renderTasks() {
+  const previous = seenTaskIds;
+  const nextSeen = new Set(tasks.map((task) => task.id));
   taskList.innerHTML = "";
   for (const task of tasks) {
     const button = document.createElement("button");
-    button.className = `task ${task.id === selectedId ? "selected" : ""}`;
+    const isNew = previous.size > 0 && !previous.has(task.id);
+    button.className = `task ${task.id === selectedId ? "selected" : ""} ${isNew ? "fresh" : ""}`;
     button.type = "button";
     button.addEventListener("click", () => selectTask(task.id));
     button.innerHTML = `
@@ -68,10 +82,12 @@ function renderTasks() {
     `;
     taskList.append(button);
   }
+  seenTaskIds = nextSeen;
 }
 
 async function selectTask(taskId) {
   selectedId = taskId;
+  lastEventText = "";
   renderTasks();
   const task = tasks.find((item) => item.id === taskId);
   if (!task) {
@@ -87,12 +103,43 @@ async function selectTask(taskId) {
 }
 
 async function renderEvents(taskId) {
-  const response = await fetch(`/api/tasks/${taskId}/events`);
-  const data = await response.json();
-  eventsEl.textContent = data.events
-    .map((item) => `[${item.createdAt}] ${item.agent}:${item.stream}\n${item.content}`)
-    .join("\n\n");
-  eventsEl.scrollTop = eventsEl.scrollHeight;
+  try {
+    const response = await fetch(`/api/tasks/${taskId}/events`);
+    const data = await response.json();
+    const nextText = data.events
+      .map((item) => `[${item.createdAt}] ${item.agent}:${item.stream}\n${item.content}`)
+      .join("\n\n");
+    if (nextText !== lastEventText) {
+      eventsEl.textContent = nextText;
+      eventsEl.scrollTop = eventsEl.scrollHeight;
+      eventsEl.classList.remove("pulse");
+      requestAnimationFrame(() => eventsEl.classList.add("pulse"));
+      lastEventText = nextText;
+    }
+  } catch {
+    connection.textContent = "reconnecting";
+    connection.className = "badge running";
+  }
+}
+
+function refreshSelectedTask() {
+  const task = tasks.find((item) => item.id === selectedId);
+  if (!task) {
+    return;
+  }
+  selectedAgent.textContent = `${task.agent} · ${task.mode} · ${task.cwd}`;
+  selectedTitle.textContent = task.title;
+  selectedStatus.textContent = task.status;
+  selectedStatus.className = `status ${task.status}`;
+  taskPacket.textContent = task.taskPacket;
+  renderEvents(task.id);
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+  }
+  refreshTimer = setInterval(refreshTasks, 1200);
 }
 
 function escapeHtml(value) {

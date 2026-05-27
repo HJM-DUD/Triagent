@@ -120,6 +120,10 @@ h3 {
   background: var(--panel-2);
 }
 
+.task.fresh {
+  animation: fresh-row 900ms ease-out;
+}
+
 .task-title {
   display: block;
   font-size: 14px;
@@ -175,6 +179,10 @@ h3 {
   line-height: 1.55;
 }
 
+.terminal.pulse {
+  animation: output-pulse 700ms ease-out;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -208,5 +216,27 @@ h3 {
 
   .terminal {
     max-height: 52dvh;
+  }
+}
+
+@keyframes fresh-row {
+  0% {
+    background: color-mix(in srgb, var(--blue) 22%, var(--panel-2));
+  }
+
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes output-pulse {
+  0% {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 50%, transparent);
+    background: color-mix(in srgb, var(--blue) 6%, var(--bg));
+  }
+
+  100% {
+    box-shadow: inset 0 0 0 1px transparent;
+    background: var(--bg);
   }
 }
