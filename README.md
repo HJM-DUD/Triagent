@@ -14,10 +14,16 @@ Triagent is GuGU's local observer and wrapper for the Codex + Hermes + Antigravi
 ```bash
 npm test
 triagent dashboard
+triagent dashboard --enable-actions
 triagent status
 triagent run hermes -- "Goal: inspect this project"
 triagent run ant -- "Goal: review this design"
 triagent run all -- "Design a safe migration plan"
+triagent run --dry-run hermes -- "Refactor safely in a sandbox"
+triagent reply <task-id> -- "Use the local dependency only."
+triagent audit <task-id> --agent ant
+triagent apply <sandbox-task-id> --yes-risk
+triagent sync-memory --dry-run
 triagent note <task-id> -- "Codex final decision: ..."
 triagent report <task-id> --out triagent-report.md
 ```
@@ -54,6 +60,17 @@ agy --print "<task packet>"
 - `/all` asks Hermes and Antigravity for compact summaries under 500 Chinese characters before cross-checking, so cross-check phases do not rely on full raw logs.
 - `triagent note <task-id> -- <markdown>` writes Codex's final decision back into the observer.
 - `triagent report <task-id> [--out report.md]` exports the task packet, raw events, exit code, evidence IDs, and Codex note as Markdown.
+
+## Version 0.3.0 Interactive and Audit Flow
+
+- Agent output containing `[NEED_CLARIFY]: <question>` marks a task as `needs_clarification`.
+- `triagent reply <task-id> -- <answer>` resumes work with the original packet, recent history, and GuGU/Codex's clarification. Each task gets at most three clarification replies.
+- `triagent audit <task-id> --agent ant|hermes` launches a shadow audit from the structured report, not the full raw log.
+- `triagent run --dry-run <agent> -- <goal>` runs a task inside a Git sandbox worktree and records the sandbox path in task metadata.
+- `triagent apply <sandbox-task-id> --yes-risk` applies a successful sandbox diff only when the real worktree is clean and the diff passes safety checks.
+- `triagent sync-memory --dry-run` compares Codex, Hermes, and Antigravity memory files without writing them.
+- `triagent dashboard --enable-actions` reveals the sandbox Apply command button; the default dashboard remains read-only.
+- Version history is maintained in `CHANGELOG.md`.
 
 ## Memory Files
 

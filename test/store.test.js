@@ -97,3 +97,31 @@ test("lists task and event changes since a timestamp", async () => {
     await rmdir(dir).catch(() => {});
   }
 });
+
+test("stores task metadata for 0.3 workflows", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "triagent-store-"));
+  const dbPath = join(dir, "triagent.sqlite");
+  try {
+    const store = new TriagentStore(dbPath);
+    const task = store.createTask({
+      mode: "single",
+      agent: "hermes",
+      cwd: "/tmp/project",
+      title: "Meta task",
+      taskPacket: "Goal: meta"
+    });
+
+    store.setTaskMeta(task.id, "clarify_count", "2");
+    store.setTaskMeta(task.id, "parent_task_id", "parent-1");
+
+    assert.equal(store.getTaskMeta(task.id, "clarify_count"), "2");
+    assert.deepEqual(store.listTaskMeta(task.id), {
+      clarify_count: "2",
+      parent_task_id: "parent-1"
+    });
+    store.close();
+  } finally {
+    await unlink(dbPath).catch(() => {});
+    await rmdir(dir).catch(() => {});
+  }
+});

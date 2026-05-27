@@ -52,6 +52,26 @@ body {
   gap: 16px;
 }
 
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.action-button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.action-button:hover {
+  border-color: var(--blue);
+}
+
 h1,
 h2,
 h3,

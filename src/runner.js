@@ -1,8 +1,12 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 
+import { buildAuditPacket } from "./audit.js";
+import { buildClarificationPacket, parseClarificationRequest, shouldBlockClarification } from "./clarify.js";
 import { buildAgentCommand, buildAllDiscussionPlan, buildTaskPacket, resolveAntigravityCommand } from "./commands.js";
 import { defaultDbPath } from "./paths.js";
+import { buildMarkdownReport } from "./report.js";
+import { buildDryRunTaskPacket, createGitSandbox } from "./sandbox.js";
 import { assertSafeTaskPacket } from "./safety.js";
 import { TriagentStore } from "./store.js";
 
@@ -26,7 +30,10 @@ export async function runSingleAgent({
   edit = false,
   title,
   store = openStore(),
-  antCommand
+  antCommand,
+  mode = "single",
+  parentTaskId,
+  meta = {}
 }) {
   const normalizedAgent = agent === "antigravity" ? "ant" : agent;
   const packet = taskPacket || buildTaskPacket({ goal, cwd, edit });
@@ -38,12 +45,18 @@ export async function runSingleAgent({
     antCommand: antCommand || (normalizedAgent === "ant" ? resolveAntigravityCommand() : undefined)
   });
   const task = store.createTask({
-    mode: "single",
+    mode,
     agent: normalizedAgent,
     cwd,
     title: title || firstLine(goal || packet),
     taskPacket: packet
   });
+  if (parentTaskId) {
+    store.setTaskMeta(task.id, "parent_task_id", parentTaskId);
+  }
+  for (const [key, value] of Object.entries(meta)) {
+    store.setTaskMeta(task.id, key, value);
+  }
 
   publish("task", task);
   store.appendEvent({
@@ -58,18 +71,21 @@ export async function runSingleAgent({
   return result;
 }
 
-export async function runAllDiscussion({ goal, cwd = process.cwd(), store = openStore() }) {
+export async function runAllDiscussion({ goal, cwd = process.cwd(), store = openStore(), mode = "all", meta = {} }) {
   const phases = buildAllDiscussionPlan(goal, cwd);
   for (const phase of phases) {
     assertSafeTaskPacket(phase.taskPacket);
   }
   const task = store.createTask({
-    mode: "all",
+    mode,
     agent: "all",
     cwd,
     title: firstLine(goal),
     taskPacket: phases.map((phase, index) => `# ${index + 1}. ${phase.title}\n${phase.taskPacket}`).join("\n\n")
   });
+  for (const [key, value] of Object.entries(meta)) {
+    store.setTaskMeta(task.id, key, value);
+  }
   publish("task", task);
 
   let failed = false;
@@ -105,6 +121,12 @@ export async function runAllDiscussion({ goal, cwd = process.cwd(), store = open
       content: `$ ${command.cmd} ${command.args.map(shellQuote).join(" ")}`
     });
     const result = await spawnTrackedProcess({ task, command, cwd, store, agent: phase.agent });
+    if (result.status === "needs_clarification") {
+      store.finishTask(task.id, { status: "needs_clarification", exitCode: 0 });
+      publish("task", { ...task, status: "needs_clarification", exitCode: 0 });
+      store.close();
+      return { taskId: task.id, status: "needs_clarification" };
+    }
     failed ||= result.exitCode !== 0;
   }
 
@@ -115,8 +137,107 @@ export async function runAllDiscussion({ goal, cwd = process.cwd(), store = open
   return { taskId: task.id, status };
 }
 
+export async function replyToTask({ taskId, answer, store = openStore(), antCommand }) {
+  const task = store.getTask(taskId);
+  if (!task) {
+    throw new Error(`Task not found: ${taskId}`);
+  }
+  const count = Number(store.getTaskMeta(taskId, "clarify_count") || 0);
+  if (shouldBlockClarification(count)) {
+    store.updateTaskStatus(taskId, "blocked");
+    store.appendEvent({
+      taskId,
+      agent: "codex",
+      stream: "clarify",
+      content: "Clarification limit reached. Task is blocked for Codex review."
+    });
+    store.close();
+    return { taskId, status: "blocked" };
+  }
+
+  const nextCount = count + 1;
+  store.setTaskMeta(taskId, "clarify_count", String(nextCount));
+  store.appendEvent({ taskId, agent: "codex", stream: "clarify", content: answer });
+  const packet = buildClarificationPacket({
+    originalPacket: task.taskPacket,
+    recentEvents: store.listEvents(taskId),
+    answer,
+    count: nextCount
+  });
+
+  return runSingleAgent({
+    agent: task.agent,
+    goal: task.title,
+    taskPacket: packet,
+    cwd: task.cwd,
+    title: `Clarification ${nextCount}: ${task.title}`,
+    store,
+    antCommand,
+    mode: "clarification",
+    parentTaskId: taskId,
+    meta: { clarify_count: String(nextCount) }
+  });
+}
+
+export async function runAudit({ taskId, auditor, store = openStore(), antCommand }) {
+  const task = store.getTask(taskId);
+  if (!task) {
+    throw new Error(`Task not found: ${taskId}`);
+  }
+  const agent = auditor === "antigravity" ? "ant" : auditor;
+  if (agent !== "ant" && agent !== "hermes") {
+    throw new Error("Audit agent must be ant or hermes.");
+  }
+  const report = buildMarkdownReport({ store, taskId });
+  const packet = buildAuditPacket({ taskId, report, auditor: agent });
+  return runSingleAgent({
+    agent,
+    goal: `Shadow audit for ${task.title}`,
+    taskPacket: packet,
+    cwd: task.cwd,
+    title: `Shadow audit: ${task.title}`,
+    store,
+    antCommand,
+    mode: "audit",
+    parentTaskId: taskId
+  });
+}
+
+export async function runDryRunAgent({ agent, goal, cwd = process.cwd(), sandboxCwd, store = openStore(), antCommand }) {
+  assertSafeTaskPacket(goal);
+  const resolvedSandboxCwd = sandboxCwd || (await createGitSandbox({ cwd }));
+  if (agent === "all") {
+    return runAllDiscussion({
+      goal: `Dry-run sandbox: ${goal}`,
+      cwd: resolvedSandboxCwd,
+      store,
+      mode: "dry-run",
+      meta: {
+        real_cwd: cwd,
+        sandbox_cwd: resolvedSandboxCwd
+      }
+    });
+  }
+  const packet = buildDryRunTaskPacket({ goal, realCwd: cwd, sandboxCwd: resolvedSandboxCwd });
+  return runSingleAgent({
+    agent,
+    goal,
+    taskPacket: packet,
+    cwd: resolvedSandboxCwd,
+    title: `Dry-run: ${firstLine(goal)}`,
+    store,
+    antCommand,
+    mode: "dry-run",
+    meta: {
+      real_cwd: cwd,
+      sandbox_cwd: resolvedSandboxCwd
+    }
+  });
+}
+
 async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
   return new Promise((resolve) => {
+    let combinedOutput = "";
     let child;
     try {
       child = spawn(command.cmd, command.args, {
@@ -131,12 +252,16 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
     }
 
     child.stdout.on("data", (chunk) => {
-      store.appendEvent({ taskId: task.id, agent, stream: "stdout", content: chunk.toString() });
+      const content = chunk.toString();
+      combinedOutput += content;
+      store.appendEvent({ taskId: task.id, agent, stream: "stdout", content });
       publish("event", { taskId: task.id });
     });
 
     child.stderr.on("data", (chunk) => {
-      store.appendEvent({ taskId: task.id, agent, stream: "stderr", content: chunk.toString() });
+      const content = chunk.toString();
+      combinedOutput += content;
+      store.appendEvent({ taskId: task.id, agent, stream: "stderr", content });
       publish("event", { taskId: task.id });
     });
 
@@ -146,7 +271,17 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
     });
 
     child.on("close", (code) => {
-      const status = code === 0 ? "succeeded" : "failed";
+      const clarification = parseClarificationRequest(combinedOutput);
+      const status = code === 0 ? (clarification ? "needs_clarification" : "succeeded") : "failed";
+      if (clarification) {
+        store.appendEvent({
+          taskId: task.id,
+          agent,
+          stream: "clarify",
+          content: clarification
+        });
+        store.setTaskMeta(task.id, "clarify_count", store.getTaskMeta(task.id, "clarify_count") || "0");
+      }
       store.finishTask(task.id, { status, exitCode: code ?? 1 });
       publish("task", { ...task, status, exitCode: code ?? 1 });
       resolve({ taskId: task.id, status, exitCode: code ?? 1 });

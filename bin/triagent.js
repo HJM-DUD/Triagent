@@ -3,8 +3,10 @@ import { writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 
 import { startDashboard } from "../src/dashboard.js";
-import { runAllDiscussion, runSingleAgent, openStore } from "../src/runner.js";
+import { runAllDiscussion, runAudit, runDryRunAgent, runSingleAgent, openStore, replyToTask } from "../src/runner.js";
 import { buildMarkdownReport } from "../src/report.js";
+import { buildMemorySyncDryRun } from "../src/memory.js";
+import { applyDiff, assertApplyAllowed, getGitDiff, isWorktreeClean } from "../src/sandbox.js";
 import { isHighRiskTask } from "../src/safety.js";
 
 const args = process.argv.slice(2);
@@ -21,6 +23,14 @@ try {
     await note(args.slice(1));
   } else if (command === "report") {
     await report(args.slice(1));
+  } else if (command === "reply") {
+    await reply(args.slice(1));
+  } else if (command === "audit") {
+    await audit(args.slice(1));
+  } else if (command === "apply") {
+    await apply(args.slice(1));
+  } else if (command === "sync-memory") {
+    await syncMemory(args.slice(1));
   } else if (command === "status") {
     status();
   } else {
@@ -35,26 +45,32 @@ function printHelp() {
   console.log(`triagent
 
 Usage:
-  triagent dashboard [--port 8765]
+  triagent dashboard [--port 8765] [--enable-actions]
   triagent status
   triagent note <task-id> -- <markdown note>
   triagent report <task-id> [--out report.md]
-  triagent run hermes -- <task packet>
-  triagent run ant -- <task packet>
-  triagent run all [--yes-risk] -- <goal>
+  triagent reply <task-id> -- <clarification answer>
+  triagent audit <task-id> --agent ant|hermes
+  triagent run [--dry-run] hermes -- <task packet>
+  triagent run [--dry-run] ant -- <task packet>
+  triagent run [--dry-run] all [--yes-risk] -- <goal>
+  triagent apply <sandbox-task-id> --yes-risk
+  triagent sync-memory --dry-run
 `);
 }
 
 async function dashboard(argv) {
   const port = Number(readFlag(argv, "--port") || 8765);
-  const { url } = await startDashboard({ port });
+  const enableActions = argv.includes("--enable-actions");
+  const { url } = await startDashboard({ port, enableActions });
   console.log(`Triagent dashboard: ${url}`);
 }
 
 async function run(argv) {
-  const agent = argv[0];
+  const dryRun = argv.includes("--dry-run");
   const yesRisk = argv.includes("--yes-risk");
-  const filteredArgv = argv.filter((item) => item !== "--yes-risk");
+  const filteredArgv = argv.filter((item) => item !== "--yes-risk" && item !== "--dry-run");
+  const agent = filteredArgv[0];
   const separator = filteredArgv.indexOf("--");
   const taskText = (separator >= 0 ? filteredArgv.slice(separator + 1) : filteredArgv.slice(1)).join(" ").trim();
 
@@ -65,12 +81,16 @@ async function run(argv) {
   await confirmHighRisk({ taskText, yesRisk });
 
   if (agent === "all") {
-    const result = await runAllDiscussion({ goal: taskText });
+    const result = dryRun
+      ? await runDryRunAgent({ agent, goal: taskText })
+      : await runAllDiscussion({ goal: taskText });
     console.log(`triagent all task ${result.taskId}: ${result.status}`);
     return;
   }
 
-  const result = await runSingleAgent({ agent, goal: taskText });
+  const result = dryRun
+    ? await runDryRunAgent({ agent, goal: taskText })
+    : await runSingleAgent({ agent, goal: taskText });
   console.log(`triagent ${agent} task ${result.taskId}: ${result.status}`);
 }
 
@@ -111,6 +131,64 @@ async function report(argv) {
   } else {
     console.log(markdown);
   }
+}
+
+async function reply(argv) {
+  const taskId = argv[0];
+  const separator = argv.indexOf("--");
+  const answer = (separator >= 0 ? argv.slice(separator + 1) : argv.slice(1)).join(" ").trim();
+
+  if (!taskId || !answer) {
+    throw new Error("Usage: triagent reply <task-id> -- <clarification answer>");
+  }
+
+  const result = await replyToTask({ taskId, answer });
+  console.log(`triagent reply task ${result.taskId}: ${result.status}`);
+}
+
+async function audit(argv) {
+  const taskId = argv[0];
+  const auditor = readFlag(argv, "--agent");
+  if (!taskId || !auditor) {
+    throw new Error("Usage: triagent audit <task-id> --agent ant|hermes");
+  }
+
+  const result = await runAudit({ taskId, auditor });
+  console.log(`triagent audit task ${result.taskId}: ${result.status}`);
+}
+
+async function apply(argv) {
+  const taskId = argv[0];
+  if (!taskId || !argv.includes("--yes-risk")) {
+    throw new Error("Usage: triagent apply <sandbox-task-id> --yes-risk");
+  }
+
+  const store = openStore();
+  const task = store.getTask(taskId);
+  if (!task) {
+    store.close();
+    throw new Error(`Task not found: ${taskId}`);
+  }
+  const sandboxCwd = store.getTaskMeta(taskId, "sandbox_cwd");
+  if (!sandboxCwd) {
+    store.close();
+    throw new Error(`Task is not a sandbox task: ${taskId}`);
+  }
+  const diffText = await getGitDiff({ cwd: sandboxCwd });
+  const clean = await isWorktreeClean({ cwd: process.cwd() });
+  assertApplyAllowed({ realWorktreeClean: clean, sandboxStatus: task.status, diffText });
+  const message = await applyDiff({ cwd: process.cwd(), diffText });
+  store.appendEvent({ taskId, agent: "codex", stream: "apply", content: message });
+  store.updateTaskStatus(taskId, "applied");
+  store.close();
+  console.log(`triagent apply ${taskId}: applied`);
+}
+
+async function syncMemory(argv) {
+  if (!argv.includes("--dry-run")) {
+    throw new Error("Usage: triagent sync-memory --dry-run");
+  }
+  console.log(await buildMemorySyncDryRun());
 }
 
 function status() {

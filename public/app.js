@@ -3,6 +3,7 @@ let selectedId = null;
 let seenTaskIds = new Set();
 let lastEventText = "";
 let refreshTimer = null;
+let config = { enableActions: false };
 
 const taskList = document.querySelector("#tasks");
 const connection = document.querySelector("#connection");
@@ -11,10 +12,23 @@ const selectedTitle = document.querySelector("#selected-title");
 const selectedStatus = document.querySelector("#selected-status");
 const taskPacket = document.querySelector("#task-packet");
 const eventsEl = document.querySelector("#events");
+const applyCommand = document.querySelector("#apply-command");
 
 connect();
+loadConfig();
 refreshTasks();
 startAutoRefresh();
+
+applyCommand.addEventListener("click", async () => {
+  if (!selectedId) {
+    return;
+  }
+  await navigator.clipboard.writeText(`triagent apply ${selectedId} --yes-risk`);
+  applyCommand.textContent = "Copied";
+  setTimeout(() => {
+    applyCommand.textContent = "Apply";
+  }, 1200);
+});
 
 function connect() {
   const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
@@ -99,6 +113,7 @@ async function selectTask(taskId) {
   selectedStatus.textContent = task.status;
   selectedStatus.className = `status ${task.status}`;
   taskPacket.textContent = task.taskPacket;
+  updateActionVisibility(task);
   await renderEvents(task.id);
 }
 
@@ -132,6 +147,7 @@ function refreshSelectedTask() {
   selectedStatus.textContent = task.status;
   selectedStatus.className = `status ${task.status}`;
   taskPacket.textContent = task.taskPacket;
+  updateActionVisibility(task);
   renderEvents(task.id);
 }
 
@@ -140,6 +156,19 @@ function startAutoRefresh() {
     clearInterval(refreshTimer);
   }
   refreshTimer = setInterval(refreshTasks, 1200);
+}
+
+async function loadConfig() {
+  try {
+    const response = await fetch("/api/config");
+    config = await response.json();
+  } catch {
+    config = { enableActions: false };
+  }
+}
+
+function updateActionVisibility(task) {
+  applyCommand.hidden = !(config.enableActions && task.mode === "dry-run");
 }
 
 function escapeHtml(value) {

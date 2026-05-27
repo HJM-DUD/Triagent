@@ -9,10 +9,10 @@ import { bus, openStore } from "./runner.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 
-export function startDashboard({ host = "127.0.0.1", port = 8765, dbPath = defaultDbPath() } = {}) {
+export function startDashboard({ host = "127.0.0.1", port = 8765, dbPath = defaultDbPath(), enableActions = false } = {}) {
   const server = createServer((req, res) => {
     try {
-      routeRequest({ req, res, dbPath });
+      routeRequest({ req, res, dbPath, enableActions });
     } catch (error) {
       sendJson(res, { error: error.message }, 500);
     }
@@ -49,8 +49,13 @@ export function startDashboard({ host = "127.0.0.1", port = 8765, dbPath = defau
   });
 }
 
-function routeRequest({ req, res, dbPath }) {
+function routeRequest({ req, res, dbPath, enableActions }) {
   const url = new URL(req.url, "http://localhost");
+
+  if (url.pathname === "/api/config") {
+    sendJson(res, { enableActions });
+    return;
+  }
 
   if (url.pathname === "/api/tasks") {
     const store = openStore(dbPath);

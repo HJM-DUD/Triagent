@@ -37,6 +37,15 @@ export class TriagentStore {
         FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS task_meta (
+        task_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (task_id, key),
+        FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      );
+
       CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_events_task_id ON events(task_id, created_at);
     `);
@@ -182,6 +191,31 @@ export class TriagentStore {
       .all(sinceIso);
 
     return { tasks, events };
+  }
+
+  setTaskMeta(taskId, key, value) {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO task_meta (task_id, key, value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(task_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .run(taskId, key, String(value), now);
+    this.db.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(now, taskId);
+  }
+
+  getTaskMeta(taskId, key) {
+    return this.db
+      .prepare("SELECT value FROM task_meta WHERE task_id = ? AND key = ?")
+      .get(taskId, key)?.value;
+  }
+
+  listTaskMeta(taskId) {
+    const rows = this.db
+      .prepare("SELECT key, value FROM task_meta WHERE task_id = ? ORDER BY key ASC")
+      .all(taskId);
+    return Object.fromEntries(rows.map((row) => [row.key, row.value]));
   }
 
   listEvents(taskId) {
