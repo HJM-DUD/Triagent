@@ -23,6 +23,8 @@ triagent run --dry-run hermes -- "Refactor safely in a sandbox"
 triagent reply <task-id> -- "Use the local dependency only."
 triagent audit <task-id> --agent ant
 triagent apply <sandbox-task-id> --yes-risk
+triagent gc
+triagent gc --apply
 triagent sync-memory --dry-run
 triagent note <task-id> -- "Codex final decision: ..."
 triagent report <task-id> --out triagent-report.md
@@ -33,6 +35,10 @@ Antigravity is invoked by Triagent through:
 ```bash
 agy --print "<task packet>"
 ```
+
+Inside the interactive Antigravity CLI, use `/model` to switch models and `/usage` to inspect available models, quota, rate limits, and remaining free/paid package percentage before choosing a model.
+
+Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (Low/High), Claude Sonnet 4.6 (Thinking), Claude Opus 4.6 (Thinking), and GPT-OSS 120B (Medium).
 
 ## Routing Prefixes
 
@@ -49,7 +55,7 @@ agy --print "<task packet>"
 - The project does not batch-delete log files.
 - Common secrets are redacted before logs are stored.
 - The dashboard auto-refreshes while open. New tasks and new output pulse briefly so GuGU can see fresh dialogue without manual refresh.
-- SQLite uses WAL mode and a short busy timeout to reduce dashboard crashes while `/all` is writing logs.
+- SQLite uses WAL mode, a longer busy timeout, write retries, and log chunking to reduce dashboard crashes while `/all` is writing logs.
 
 ## Version 0.2.0 Safety and Review Flow
 
@@ -71,6 +77,14 @@ agy --print "<task packet>"
 - `triagent sync-memory --dry-run` compares Codex, Hermes, and Antigravity memory files without writing them.
 - `triagent dashboard --enable-actions` reveals the sandbox Apply command button; the default dashboard remains read-only.
 - Version history is maintained in `CHANGELOG.md`.
+
+## Version 0.3.1 Stability Fixes
+
+- `triagent gc` previews sandbox worktrees that are safe to clean.
+- `triagent gc --apply` removes eligible Git sandbox worktrees through `git worktree remove <path>`, not shell recursive deletion.
+- Applied sandboxes are eligible for cleanup. Old clean sandboxes become eligible after 7 days.
+- Successful Hermes or Antigravity output without evidence IDs now marks the task as `needs_evidence` for Codex review.
+- SQLite writes retry transient `SQLITE_BUSY` / `SQLITE_LOCKED` errors and split long stdout/stderr chunks before storing.
 
 ## Memory Files
 

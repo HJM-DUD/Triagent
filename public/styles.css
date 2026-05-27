@@ -223,6 +223,10 @@ h3 {
   color: var(--blue);
 }
 
+.needs_evidence {
+  color: var(--yellow);
+}
+
 @media (max-width: 860px) {
   .shell,
   .panes {

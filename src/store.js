@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { redactSecrets } from "./redact.js";
+import { chunkContent, runWithSqliteRetry } from "./sqlite-retry.js";
 
 export class TriagentStore {
   constructor(dbPath) {
@@ -11,7 +12,7 @@ export class TriagentStore {
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA foreign_keys = ON;");
     this.db.exec("PRAGMA journal_mode = WAL;");
-    this.db.exec("PRAGMA busy_timeout = 3000;");
+    this.db.exec("PRAGMA busy_timeout = 10000;");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
@@ -64,62 +65,74 @@ export class TriagentStore {
       createdAt: now,
       updatedAt: now
     };
-    this.db
-      .prepare(
-        `INSERT INTO tasks
-          (id, mode, agent, cwd, title, status, task_packet, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        task.id,
-        task.mode,
-        task.agent,
-        task.cwd,
-        task.title,
-        task.status,
-        task.taskPacket,
-        task.createdAt,
-        task.updatedAt
-      );
+    this.write(() => {
+      this.db
+        .prepare(
+          `INSERT INTO tasks
+            (id, mode, agent, cwd, title, status, task_packet, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          task.id,
+          task.mode,
+          task.agent,
+          task.cwd,
+          task.title,
+          task.status,
+          task.taskPacket,
+          task.createdAt,
+          task.updatedAt
+        );
+    });
     return task;
   }
 
   appendEvent({ taskId, agent, stream, content }) {
     const now = new Date().toISOString();
-    const event = {
-      id: randomUUID(),
-      taskId,
-      agent,
-      stream,
-      content: redactSecrets(content),
-      createdAt: now
-    };
-    this.db
-      .prepare(
-        `INSERT INTO events (id, task_id, agent, stream, content, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(event.id, event.taskId, event.agent, event.stream, event.content, event.createdAt);
-    this.db.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(now, taskId);
-    return event;
+    let firstEvent;
+    for (const chunk of chunkContent(redactSecrets(content))) {
+      const event = {
+        id: randomUUID(),
+        taskId,
+        agent,
+        stream,
+        content: chunk,
+        createdAt: now
+      };
+      this.write(() => {
+        this.db
+          .prepare(
+            `INSERT INTO events (id, task_id, agent, stream, content, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          )
+          .run(event.id, event.taskId, event.agent, event.stream, event.content, event.createdAt);
+        this.db.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(now, taskId);
+      });
+      firstEvent ||= event;
+    }
+    return firstEvent;
   }
 
   finishTask(taskId, { status, exitCode }) {
     const now = new Date().toISOString();
-    this.db
-      .prepare(
-        `UPDATE tasks
-         SET status = ?, exit_code = ?, updated_at = ?, finished_at = ?
-         WHERE id = ?`
-      )
-      .run(status, exitCode, now, now, taskId);
+    this.write(() => {
+      this.db
+        .prepare(
+          `UPDATE tasks
+           SET status = ?, exit_code = ?, updated_at = ?, finished_at = ?
+           WHERE id = ?`
+        )
+        .run(status, exitCode, now, now, taskId);
+    });
   }
 
   updateTaskStatus(taskId, status) {
     const now = new Date().toISOString();
-    this.db
-      .prepare("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?")
-      .run(status, now, taskId);
+    this.write(() => {
+      this.db
+        .prepare("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?")
+        .run(status, now, taskId);
+    });
   }
 
   addCodexNote(taskId, content) {
@@ -134,15 +147,19 @@ export class TriagentStore {
   }
 
   markTaskCreatedAt(taskId, createdAt) {
-    this.db
-      .prepare("UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?")
-      .run(createdAt, createdAt, taskId);
+    this.write(() => {
+      this.db
+        .prepare("UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?")
+        .run(createdAt, createdAt, taskId);
+    });
   }
 
   pruneOlderThan(nowIso, retentionDays) {
     const cutoff = new Date(Date.parse(nowIso) - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-    this.db.prepare("DELETE FROM tasks WHERE created_at < ?").run(cutoff);
-    this.db.prepare("DELETE FROM events WHERE task_id NOT IN (SELECT id FROM tasks)").run();
+    this.write(() => {
+      this.db.prepare("DELETE FROM tasks WHERE created_at < ?").run(cutoff);
+      this.db.prepare("DELETE FROM events WHERE task_id NOT IN (SELECT id FROM tasks)").run();
+    });
   }
 
   listTasks(limit = 100) {
@@ -195,14 +212,16 @@ export class TriagentStore {
 
   setTaskMeta(taskId, key, value) {
     const now = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO task_meta (task_id, key, value, updated_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(task_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-      )
-      .run(taskId, key, String(value), now);
-    this.db.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(now, taskId);
+    this.write(() => {
+      this.db
+        .prepare(
+          `INSERT INTO task_meta (task_id, key, value, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(task_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+        )
+        .run(taskId, key, String(value), now);
+      this.db.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(now, taskId);
+    });
   }
 
   getTaskMeta(taskId, key) {
@@ -231,5 +250,9 @@ export class TriagentStore {
 
   close() {
     this.db.close();
+  }
+
+  write(operation) {
+    return runWithSqliteRetry(operation);
   }
 }

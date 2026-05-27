@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { access, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -40,6 +40,63 @@ export async function createGitSandbox({ cwd }) {
   return sandboxCwd;
 }
 
+export async function buildSandboxGcPlan({
+  store,
+  nowIso = new Date().toISOString(),
+  olderThanDays = 7,
+  inspectSandbox = inspectGitSandbox
+}) {
+  const nowMs = Date.parse(nowIso);
+  const candidates = [];
+
+  for (const task of store.listTasks(1000)) {
+    const sandboxCwd = store.getTaskMeta(task.id, "sandbox_cwd");
+    if (!sandboxCwd) {
+      continue;
+    }
+
+    const ageDays = Math.floor((nowMs - Date.parse(task.updatedAt)) / (24 * 60 * 60 * 1000));
+    const inspection = await inspectSandbox(sandboxCwd);
+    if (!inspection.exists) {
+      continue;
+    }
+
+    if (task.status === "applied") {
+      candidates.push({
+        taskId: task.id,
+        path: sandboxCwd,
+        status: task.status,
+        ageDays,
+        reason: "applied",
+        force: true
+      });
+      continue;
+    }
+
+    if (ageDays >= olderThanDays && inspection.clean) {
+      candidates.push({
+        taskId: task.id,
+        path: sandboxCwd,
+        status: task.status,
+        ageDays,
+        reason: `older_than_${olderThanDays}_days_clean`,
+        force: false
+      });
+    }
+  }
+
+  return { preview: true, candidates };
+}
+
+export async function applySandboxGcPlan({ candidates, removeWorktree = removeGitWorktree }) {
+  const removed = [];
+  for (const candidate of candidates) {
+    await removeWorktree(candidate.path, { force: Boolean(candidate.force) });
+    removed.push(candidate.taskId);
+  }
+  return { removed };
+}
+
 export async function getGitDiff({ cwd }) {
   const { stdout } = await execFileAsync("git", ["diff", "--binary"], { cwd, maxBuffer: 20 * 1024 * 1024 });
   return stdout;
@@ -48,6 +105,28 @@ export async function getGitDiff({ cwd }) {
 export async function isWorktreeClean({ cwd }) {
   const { stdout } = await execFileAsync("git", ["status", "--porcelain"], { cwd });
   return stdout.trim() === "";
+}
+
+export async function inspectGitSandbox(path) {
+  try {
+    await access(path);
+  } catch {
+    return { exists: false, clean: false };
+  }
+
+  return {
+    exists: true,
+    clean: await isWorktreeClean({ cwd: path })
+  };
+}
+
+export async function removeGitWorktree(path, { force = false } = {}) {
+  const args = ["worktree", "remove"];
+  if (force) {
+    args.push("--force");
+  }
+  args.push(path);
+  await execFileAsync("git", args);
 }
 
 export async function applyDiff({ cwd, diffText }) {

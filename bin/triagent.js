@@ -6,7 +6,7 @@ import { startDashboard } from "../src/dashboard.js";
 import { runAllDiscussion, runAudit, runDryRunAgent, runSingleAgent, openStore, replyToTask } from "../src/runner.js";
 import { buildMarkdownReport } from "../src/report.js";
 import { buildMemorySyncDryRun } from "../src/memory.js";
-import { applyDiff, assertApplyAllowed, getGitDiff, isWorktreeClean } from "../src/sandbox.js";
+import { applyDiff, applySandboxGcPlan, assertApplyAllowed, buildSandboxGcPlan, getGitDiff, isWorktreeClean } from "../src/sandbox.js";
 import { isHighRiskTask } from "../src/safety.js";
 
 const args = process.argv.slice(2);
@@ -29,6 +29,8 @@ try {
     await audit(args.slice(1));
   } else if (command === "apply") {
     await apply(args.slice(1));
+  } else if (command === "gc") {
+    await gc(args.slice(1));
   } else if (command === "sync-memory") {
     await syncMemory(args.slice(1));
   } else if (command === "status") {
@@ -55,6 +57,7 @@ Usage:
   triagent run [--dry-run] ant -- <task packet>
   triagent run [--dry-run] all [--yes-risk] -- <goal>
   triagent apply <sandbox-task-id> --yes-risk
+  triagent gc [--apply]
   triagent sync-memory --dry-run
 `);
 }
@@ -182,6 +185,32 @@ async function apply(argv) {
   store.updateTaskStatus(taskId, "applied");
   store.close();
   console.log(`triagent apply ${taskId}: applied`);
+}
+
+async function gc(argv) {
+  const shouldApply = argv.includes("--apply");
+  const store = openStore();
+  const plan = await buildSandboxGcPlan({ store });
+  store.close();
+
+  if (!plan.candidates.length) {
+    console.log("triagent gc: no sandbox worktrees eligible for cleanup");
+    return;
+  }
+
+  for (const candidate of plan.candidates) {
+    console.log(
+      `${shouldApply ? "remove" : "preview"} ${candidate.taskId} ${candidate.status} ${candidate.ageDays}d ${candidate.reason} ${candidate.path}`
+    );
+  }
+
+  if (!shouldApply) {
+    console.log("triagent gc: preview only. Re-run with --apply to remove eligible Git worktrees.");
+    return;
+  }
+
+  const result = await applySandboxGcPlan({ candidates: plan.candidates });
+  console.log(`triagent gc: removed ${result.removed.length} sandbox worktree(s)`);
 }
 
 async function syncMemory(argv) {

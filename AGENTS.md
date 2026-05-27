@@ -28,10 +28,33 @@ Codex 是主脑，Hermes 和 Antigravity CLI 是子agent。正式子agent任务�
 - `triagent run hermes -- "<任务包>"`：记录并启动 Hermes。
 - `triagent run ant -- "<任务包>"`：记录并启动 Antigravity；当前已确认实际底层命令为 `agy --print`。
 - `triagent run all -- "<目标>"`：记录并启动三方讨论流程。
+- `triagent gc`：预览可安全清理的 dry-run Git 沙盒 worktree。
+- `triagent gc --apply`：通过 `git worktree remove <path>` 清理符合条件的沙盒，不使用递归删除命令。
 
 直接 CLI 只作为备用或调试路径，可能不会完整进入观察台：
 - Hermes：`hermes -z "<任务包>" --provider deepseek --model deepseek-v4-pro`
 - Antigravity：`agy --print "<任务包>"`
+
+## Antigravity 模型与配额
+
+Antigravity CLI 支持在交互界面中用 `/model` 切换模型，用 `/usage` 查看当前所有可用模型的配额状态、速率限制和免费/付费包剩余百分比。Codex 在其他项目中使用 Antigravity 时，也应该记住可以先检查 `/usage`，再按任务选择合适模型。
+
+已知可选模型包括：
+- Gemini 3.5 Flash (Medium)
+- Gemini 3.5 Flash (High)
+- Gemini 3.5 Flash (Low)
+- Gemini 3.1 Pro (Low)
+- Gemini 3.1 Pro (High)
+- Claude Sonnet 4.6 (Thinking)
+- Claude Opus 4.6 (Thinking)
+- GPT-OSS 120B (Medium)
+
+模型选择建议：
+- 快速原型、一般总结、轻量产品判断：优先 Gemini 3.5 Flash (Medium/Low)。
+- 复杂推理、架构取舍、长上下文综合：优先 Gemini 3.1 Pro (High) 或 Claude Sonnet 4.6 (Thinking)。
+- 最高强度推理、关键方案复核：可用 Claude Opus 4.6 (Thinking)，但先看 `/usage`。
+- 开源模型视角或替代判断：可用 GPT-OSS 120B (Medium)。
+- 如果配额低、限速或模型不可用，换用同类低成本模型，并在任务结果里说明。
 
 ## 能力分工
 
@@ -48,6 +71,10 @@ Antigravity 适合长上下文、多模态、Google 生态、前端/原型、替
 仪表盘只显示本地日志，不调用模型，不消耗 token。子agent stdout/stderr 默认只进入网页和 SQLite，不刷屏到当前终端。
 
 子agent任务包必须包含删除规则、当前工作目录、是否允许编辑、允许路径、输出格式和停止条件。允许编辑时要限域；Codex 必须审查 diff、运行或判断验证命令，再向 GuGU 汇报。
+
+Hermes 或 Antigravity 成功退出但输出没有 `[E1]`、`[E2]` 等证据 ID 时，Triagent 会把任务标记为 `needs_evidence`。Codex 不能直接采纳该输出，必须复核、补证据或重跑任务。
+
+dry-run 沙盒不会偷偷自动删除。需要释放空间时先运行 `triagent gc` 查看预览；确认无误后再运行 `triagent gc --apply`。该命令只处理 Triagent 记录过的 Git worktree，并使用 Git 原生命令清理。
 
 ## 版本发布规则
 

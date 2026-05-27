@@ -2,6 +2,32 @@
 
 All notable Triagent version changes are recorded here. Before any future release or Git tag, update this file first.
 
+## 0.3.1 - 2026-05-27
+
+### Added
+- Added `triagent gc` to preview eligible dry-run Git sandbox worktrees.
+- Added `triagent gc --apply` to clean eligible sandbox worktrees with `git worktree remove <path>`.
+- Added hard evidence checking for successful Hermes and Antigravity output.
+
+### Changed
+- Version upgraded to `0.3.1`.
+- SQLite writes now retry transient `SQLITE_BUSY` / `SQLITE_LOCKED` errors.
+- Long stdout/stderr content is split into bounded chunks before being stored.
+- Dashboard styling now recognizes the `needs_evidence` task status.
+
+### Safety
+- Sandbox cleanup only targets Triagent-recorded sandbox paths.
+- Sandbox cleanup defaults to preview-only and requires explicit `--apply` before any Git worktree is removed.
+- Applied sandboxes are removed through Git worktree removal with force because their diff has already been applied back to the real worktree.
+- Evidence-free successful subagent output is blocked as `needs_evidence` instead of being accepted as `succeeded`.
+
+### Tests
+- `npm test`: 30 tests passing.
+
+### Known Limits
+- `triagent gc --apply` cleans eligible Git worktrees but does not rewrite or delete unrelated files.
+- Rust interceptor and high-performance log search remain future work.
+
 ## 0.3.0 - 2026-05-27
 
 ### Added
@@ -48,3 +74,29 @@ All notable Triagent version changes are recorded here. Before any future releas
 
 ### Tests
 - `npm test`: 13 tests passing.
+
+## 0.1.0 - 2026-05-25
+
+### Initial Implementation
+- Created Triagent as GuGU's local observer and wrapper for Codex, Hermes, and Antigravity.
+- Added the read-only dashboard for recording task packets, raw CLI output, statuses, exit codes, and `/all` phases.
+- Added core commands: `triagent dashboard`, `triagent status`, `triagent run hermes`, `triagent run ant`, and `triagent run all`.
+- Added Hermes command wiring through `hermes -z ... --provider deepseek --model deepseek-v4-pro`.
+- Added Antigravity command wiring through `agy --print`.
+- Added deterministic `/all` discussion phases: Codex problem definition, Hermes analysis, Antigravity analysis, Codex draft decision, cross-checks, and Codex final decision.
+
+### Original Design Intent
+- Keep Codex as the lead brain for requirements, architecture, safety boundaries, final review, and GuGU-facing reports.
+- Use Hermes for local code search, logs, dependency/config inspection, reproducible analysis, and small bounded mechanical work.
+- Use Antigravity for long-context review, product/UX perspective, alternatives, Google ecosystem fit, and Gemini-native workflows.
+- Keep the dashboard read-only so it records local logs without calling models or spending extra tokens.
+- Store runtime data locally in SQLite under `~/.triagent/triagent.sqlite`.
+
+### Safety
+- Added the project deletion rule to every generated task packet.
+- Required task packets to include current working directory, edit permission, allowed paths, output format, and stop conditions.
+- Added basic secret redaction before logs are stored.
+- Added 30-day retention pruning for old SQLite task records.
+
+### Tests
+- `npm test`: 7 tests passing in the initial release.

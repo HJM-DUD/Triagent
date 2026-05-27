@@ -1,3 +1,5 @@
+import { collectEvidenceIds } from "./evidence.js";
+
 export function buildMarkdownReport({ store, taskId }) {
   const task = store.getTask(taskId);
   if (!task) {
@@ -5,7 +7,7 @@ export function buildMarkdownReport({ store, taskId }) {
   }
 
   const events = store.listEvents(taskId);
-  const evidenceIds = collectEvidenceIds(events);
+  const evidenceIds = collectEvidenceIds(events.map((event) => event.content).join("\n"));
 
   return [
     `# Triagent Report: ${task.title}`,
@@ -44,14 +46,4 @@ function formatEvent(event) {
     "```",
     ""
   ].join("\n");
-}
-
-function collectEvidenceIds(events) {
-  const ids = new Set();
-  for (const event of events) {
-    for (const match of event.content.matchAll(/\[E\d+\]/g)) {
-      ids.add(match[0]);
-    }
-  }
-  return [...ids].sort();
 }

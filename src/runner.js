@@ -5,6 +5,7 @@ import { buildAuditPacket } from "./audit.js";
 import { buildClarificationPacket, parseClarificationRequest, shouldBlockClarification } from "./clarify.js";
 import { buildAgentCommand, buildAllDiscussionPlan, buildTaskPacket, resolveAntigravityCommand } from "./commands.js";
 import { defaultDbPath } from "./paths.js";
+import { evaluateEvidenceStatus } from "./evidence.js";
 import { buildMarkdownReport } from "./report.js";
 import { buildDryRunTaskPacket, createGitSandbox } from "./sandbox.js";
 import { assertSafeTaskPacket } from "./safety.js";
@@ -126,6 +127,12 @@ export async function runAllDiscussion({ goal, cwd = process.cwd(), store = open
       publish("task", { ...task, status: "needs_clarification", exitCode: 0 });
       store.close();
       return { taskId: task.id, status: "needs_clarification" };
+    }
+    if (result.status === "needs_evidence") {
+      store.finishTask(task.id, { status: "needs_evidence", exitCode: 0 });
+      publish("task", { ...task, status: "needs_evidence", exitCode: 0 });
+      store.close();
+      return { taskId: task.id, status: "needs_evidence" };
     }
     failed ||= result.exitCode !== 0;
   }
@@ -272,7 +279,13 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
 
     child.on("close", (code) => {
       const clarification = parseClarificationRequest(combinedOutput);
-      const status = code === 0 ? (clarification ? "needs_clarification" : "succeeded") : "failed";
+      const evaluation = evaluateEvidenceStatus({
+        agent,
+        exitCode: code ?? 1,
+        output: combinedOutput,
+        hasClarification: Boolean(clarification)
+      });
+      const status = evaluation.status;
       if (clarification) {
         store.appendEvent({
           taskId: task.id,
@@ -281,6 +294,14 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
           content: clarification
         });
         store.setTaskMeta(task.id, "clarify_count", store.getTaskMeta(task.id, "clarify_count") || "0");
+      }
+      if (status === "needs_evidence") {
+        store.appendEvent({
+          taskId: task.id,
+          agent: "triagent",
+          stream: "evidence",
+          content: "Missing evidence IDs in successful subagent output. Codex review is required before accepting this result."
+        });
       }
       store.finishTask(task.id, { status, exitCode: code ?? 1 });
       publish("task", { ...task, status, exitCode: code ?? 1 });

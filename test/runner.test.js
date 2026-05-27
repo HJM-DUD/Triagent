@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rmdir, unlink } from "node:fs/promises";
+import { chmod, mkdtemp, rmdir, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -45,6 +45,36 @@ test("marks task as needs_clarification when agent emits marker", async () => {
     assert.equal(result.status, "needs_clarification");
     assert.equal(task.status, "needs_clarification");
     assert.equal(events.some((event) => event.stream === "clarify"), true);
+    verifyStore.close();
+  } finally {
+    await unlink(dbPath).catch(() => {});
+    await rmdir(dir).catch(() => {});
+  }
+});
+
+test("marks successful subagent output without evidence IDs as needs_evidence", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "triagent-runner-"));
+  const dbPath = join(dir, "triagent.sqlite");
+  try {
+    const store = new TriagentStore(dbPath);
+    const fakeAgent = join(dir, "fake-agent.sh");
+    await writeFile(fakeAgent, "#!/bin/sh\necho 'I checked the project and it is fine.'\n", "utf8");
+    await chmod(fakeAgent, 0o755);
+
+    const result = await runSingleAgent({
+      agent: "ant",
+      goal: "review without evidence",
+      store,
+      antCommand: fakeAgent
+    });
+
+    const verifyStore = new TriagentStore(dbPath);
+    const task = verifyStore.getTask(result.taskId);
+    const events = verifyStore.listEvents(result.taskId);
+
+    assert.equal(result.status, "needs_evidence");
+    assert.equal(task.status, "needs_evidence");
+    assert.equal(events.some((event) => event.stream === "evidence"), true);
     verifyStore.close();
   } finally {
     await unlink(dbPath).catch(() => {});
