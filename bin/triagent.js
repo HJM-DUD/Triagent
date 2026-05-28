@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 
 import { startDashboard } from "../src/dashboard.js";
+import { loadTriagentConfig } from "../src/config.js";
 import { runAllDiscussion, runAudit, runDryRunAgent, runSingleAgent, openStore, replyToTask } from "../src/runner.js";
 import { buildMarkdownReport } from "../src/report.js";
 import { buildMemorySyncDryRun } from "../src/memory.js";
@@ -51,11 +52,11 @@ Usage:
   triagent status
   triagent note <task-id> -- <markdown note>
   triagent report <task-id> [--out report.md]
-  triagent reply <task-id> -- <clarification answer>
+  triagent reply [--full-context] <task-id> -- <clarification answer>
   triagent audit <task-id> --agent ant|hermes
   triagent run [--dry-run] hermes -- <task packet>
   triagent run [--dry-run] ant -- <task packet>
-  triagent run [--dry-run] all [--yes-risk] -- <goal>
+  triagent run [--dry-run] all [--yes-risk] [--legacy|--token-save|--no-token-save] -- <goal>
   triagent apply <sandbox-task-id> --yes-risk
   triagent gc [--apply]
   triagent sync-memory --dry-run
@@ -72,7 +73,12 @@ async function dashboard(argv) {
 async function run(argv) {
   const dryRun = argv.includes("--dry-run");
   const yesRisk = argv.includes("--yes-risk");
-  const filteredArgv = argv.filter((item) => item !== "--yes-risk" && item !== "--dry-run");
+  const legacy = argv.includes("--legacy");
+  const tokenSaveFlag = argv.includes("--token-save");
+  const noTokenSaveFlag = argv.includes("--no-token-save");
+  const filteredArgv = argv.filter(
+    (item) => !["--yes-risk", "--dry-run", "--legacy", "--token-save", "--no-token-save"].includes(item)
+  );
   const agent = filteredArgv[0];
   const separator = filteredArgv.indexOf("--");
   const taskText = (separator >= 0 ? filteredArgv.slice(separator + 1) : filteredArgv.slice(1)).join(" ").trim();
@@ -84,9 +90,26 @@ async function run(argv) {
   await confirmHighRisk({ taskText, yesRisk });
 
   if (agent === "all") {
+    const config = loadTriagentConfig({
+      cwd: process.cwd(),
+      overrides: {
+        tokenSaveMode: legacy || noTokenSaveFlag ? false : tokenSaveFlag ? true : undefined
+      }
+    });
     const result = dryRun
-      ? await runDryRunAgent({ agent, goal: taskText })
-      : await runAllDiscussion({ goal: taskText });
+      ? await runDryRunAgent({
+          agent,
+          goal: taskText,
+          tokenSaveMode: config.tokenSaveMode,
+          prefilterMaxChars: config.prefilterMaxChars,
+          complianceMode: config.complianceMode
+        })
+      : await runAllDiscussion({
+          goal: taskText,
+          tokenSaveMode: config.tokenSaveMode,
+          prefilterMaxChars: config.prefilterMaxChars,
+          complianceMode: config.complianceMode
+        });
     console.log(`triagent all task ${result.taskId}: ${result.status}`);
     return;
   }
@@ -137,15 +160,17 @@ async function report(argv) {
 }
 
 async function reply(argv) {
-  const taskId = argv[0];
-  const separator = argv.indexOf("--");
-  const answer = (separator >= 0 ? argv.slice(separator + 1) : argv.slice(1)).join(" ").trim();
+  const fullContext = argv.includes("--full-context");
+  const filteredArgv = argv.filter((item) => item !== "--full-context");
+  const taskId = filteredArgv[0];
+  const separator = filteredArgv.indexOf("--");
+  const answer = (separator >= 0 ? filteredArgv.slice(separator + 1) : filteredArgv.slice(1)).join(" ").trim();
 
   if (!taskId || !answer) {
     throw new Error("Usage: triagent reply <task-id> -- <clarification answer>");
   }
 
-  const result = await replyToTask({ taskId, answer });
+  const result = await replyToTask({ taskId, answer, fullContext });
   console.log(`triagent reply task ${result.taskId}: ${result.status}`);
 }
 

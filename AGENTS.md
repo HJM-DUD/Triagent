@@ -27,7 +27,10 @@ Codex 是主脑，Hermes 和 Antigravity CLI 是子agent。正式子agent任务�
 - `triagent status`：查看最近任务。
 - `triagent run hermes -- "<任务包>"`：记录并启动 Hermes。
 - `triagent run ant -- "<任务包>"`：记录并启动 Antigravity；当前已确认实际底层命令为 `agy --print`。
-- `triagent run all -- "<目标>"`：记录并启动三方讨论流程。
+- `triagent run all -- "<目标>"`：默认启动 0.3.2 省 token 流程：Hermes 前置过滤、Antigravity 备选视角、Hermes 联合提案、Hermes 合规检查、Codex 最终裁决。
+- `triagent run all --legacy -- "<目标>"`：使用 0.3.1 旧七阶段讨论流程。
+- `triagent run all --no-token-save -- "<目标>"`：本次禁用省 token 流。
+- `triagent reply --full-context <task-id> -- "<回复>"`：澄清续跑时强制使用旧完整上下文包。
 - `triagent gc`：预览可安全清理的 dry-run Git 沙盒 worktree。
 - `triagent gc --apply`：通过 `git worktree remove <path>` 清理符合条件的沙盒，不使用递归删除命令。
 
@@ -64,7 +67,7 @@ Hermes 适合代码搜索、文件结构梳理、日志压缩、依赖/配置盘
 
 Antigravity 适合长上下文、多模态、Google 生态、前端/原型、替代方案、UI/产品视角和 Gemini/Antigravity 原生 agent 工作流。
 
-`/all` 用于超复杂、高不确定、架构/安全/大迁移/产品取舍类任务。Codex 先定义问题；Hermes 和 Antigravity 分别分析；随后互相交叉检查；最后 Codex 汇总分歧、采纳点、拒绝理由和最终方案。
+`/all` 用于超复杂、高不确定、架构/安全/大迁移/产品取舍类任务。0.3.2 起默认走省 token 模式：Hermes 先把原始上下文压缩成结构化线索快报；Antigravity 只看快报给备选视角；Hermes 起草极简联合提案和合规检查；最后 Codex 只读提案并做最终裁决。需要旧辩论流时使用 `--legacy`。
 
 ## 观察台与安全
 
@@ -73,6 +76,10 @@ Antigravity 适合长上下文、多模态、Google 生态、前端/原型、替
 子agent任务包必须包含删除规则、当前工作目录、是否允许编辑、允许路径、输出格式和停止条件。允许编辑时要限域；Codex 必须审查 diff、运行或判断验证命令，再向 GuGU 汇报。
 
 Hermes 或 Antigravity 成功退出但输出没有 `[E1]`、`[E2]` 等证据 ID 时，Triagent 会把任务标记为 `needs_evidence`。Codex 不能直接采纳该输出，必须复核、补证据或重跑任务。
+
+Hermes 合规检查返回 `FAIL` 时，Triagent 会把任务标记为 `needs_compliance`。Codex 不能直接采纳该输出，必须复核红线、证据映射和验证缺口，再决定补证据、改任务包或重跑。
+
+项目可用 `triagent.config.json` 配置 `token_save_mode`、`prefilter_max_chars` 和 `compliance_mode`。CLI 参数优先于配置文件。
 
 dry-run 沙盒不会偷偷自动删除。需要释放空间时先运行 `triagent gc` 查看预览；确认无误后再运行 `triagent gc --apply`。该命令只处理 Triagent 记录过的 Git worktree，并使用 Git 原生命令清理。
 

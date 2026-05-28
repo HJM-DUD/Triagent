@@ -2,7 +2,12 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import { buildAuditPacket } from "./audit.js";
-import { buildClarificationPacket, parseClarificationRequest, shouldBlockClarification } from "./clarify.js";
+import {
+  buildClarificationPacket,
+  buildIncrementalClarificationPacket,
+  parseClarificationRequest,
+  shouldBlockClarification
+} from "./clarify.js";
 import { buildAgentCommand, buildAllDiscussionPlan, buildTaskPacket, resolveAntigravityCommand } from "./commands.js";
 import { defaultDbPath } from "./paths.js";
 import { evaluateEvidenceStatus } from "./evidence.js";
@@ -10,6 +15,14 @@ import { buildMarkdownReport } from "./report.js";
 import { buildDryRunTaskPacket, createGitSandbox } from "./sandbox.js";
 import { assertSafeTaskPacket } from "./safety.js";
 import { TriagentStore } from "./store.js";
+import {
+  buildAlternativePacket,
+  buildCompliancePacket,
+  buildJointProposalPacket,
+  buildPrefilterPacket,
+  evaluateComplianceOutput,
+  truncateSummary
+} from "./token-save.js";
 
 export const bus = new EventEmitter();
 
@@ -34,7 +47,8 @@ export async function runSingleAgent({
   antCommand,
   mode = "single",
   parentTaskId,
-  meta = {}
+  meta = {},
+  hermesCommand
 }) {
   const normalizedAgent = agent === "antigravity" ? "ant" : agent;
   const packet = taskPacket || buildTaskPacket({ goal, cwd, edit });
@@ -43,6 +57,7 @@ export async function runSingleAgent({
     agent: normalizedAgent,
     taskPacket: packet,
     edit,
+    hermesCommand,
     antCommand: antCommand || (normalizedAgent === "ant" ? resolveAntigravityCommand() : undefined)
   });
   const task = store.createTask({
@@ -72,7 +87,32 @@ export async function runSingleAgent({
   return result;
 }
 
-export async function runAllDiscussion({ goal, cwd = process.cwd(), store = openStore(), mode = "all", meta = {} }) {
+export async function runAllDiscussion({
+  goal,
+  cwd = process.cwd(),
+  store = openStore(),
+  mode = "all",
+  meta = {},
+  tokenSaveMode = true,
+  prefilterMaxChars = 800,
+  complianceMode = "block",
+  hermesCommand,
+  antCommand
+}) {
+  if (tokenSaveMode) {
+    return runTokenSaveDiscussion({
+      goal,
+      cwd,
+      store,
+      mode,
+      meta,
+      prefilterMaxChars,
+      complianceMode,
+      hermesCommand,
+      antCommand
+    });
+  }
+
   const phases = buildAllDiscussionPlan(goal, cwd);
   for (const phase of phases) {
     assertSafeTaskPacket(phase.taskPacket);
@@ -87,6 +127,8 @@ export async function runAllDiscussion({ goal, cwd = process.cwd(), store = open
   for (const [key, value] of Object.entries(meta)) {
     store.setTaskMeta(task.id, key, value);
   }
+  store.setTaskMeta(task.id, "token_save_mode", "false");
+  store.setTaskMeta(task.id, "legacy_all", "true");
   publish("task", task);
 
   let failed = false;
@@ -113,7 +155,8 @@ export async function runAllDiscussion({ goal, cwd = process.cwd(), store = open
     const command = buildAgentCommand({
       agent: phase.agent,
       taskPacket: phase.taskPacket,
-      antCommand: phase.agent === "ant" ? resolveAntigravityCommand() : undefined
+      hermesCommand,
+      antCommand: phase.agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined
     });
     store.appendEvent({
       taskId: task.id,
@@ -144,7 +187,7 @@ export async function runAllDiscussion({ goal, cwd = process.cwd(), store = open
   return { taskId: task.id, status };
 }
 
-export async function replyToTask({ taskId, answer, store = openStore(), antCommand }) {
+export async function replyToTask({ taskId, answer, store = openStore(), antCommand, hermesCommand, fullContext = false }) {
   const task = store.getTask(taskId);
   if (!task) {
     throw new Error(`Task not found: ${taskId}`);
@@ -165,12 +208,23 @@ export async function replyToTask({ taskId, answer, store = openStore(), antComm
   const nextCount = count + 1;
   store.setTaskMeta(taskId, "clarify_count", String(nextCount));
   store.appendEvent({ taskId, agent: "codex", stream: "clarify", content: answer });
-  const packet = buildClarificationPacket({
-    originalPacket: task.taskPacket,
-    recentEvents: store.listEvents(taskId),
-    answer,
-    count: nextCount
-  });
+  const recentEvents = store.listEvents(taskId);
+  const hasSummary = Boolean(store.getTaskMeta(taskId, "prefilter_summary") || store.getTaskMeta(taskId, "joint_proposal"));
+  const packet =
+    hasSummary && !fullContext
+      ? buildIncrementalClarificationPacket({
+          taskId,
+          summaryRef: store.getTaskMeta(taskId, "prefilter_summary") ? "prefilter_summary" : "joint_proposal",
+          recentEvents,
+          answer,
+          count: nextCount
+        })
+      : buildClarificationPacket({
+          originalPacket: task.taskPacket,
+          recentEvents,
+          answer,
+          count: nextCount
+        });
 
   return runSingleAgent({
     agent: task.agent,
@@ -180,13 +234,14 @@ export async function replyToTask({ taskId, answer, store = openStore(), antComm
     title: `Clarification ${nextCount}: ${task.title}`,
     store,
     antCommand,
+    hermesCommand,
     mode: "clarification",
     parentTaskId: taskId,
     meta: { clarify_count: String(nextCount) }
   });
 }
 
-export async function runAudit({ taskId, auditor, store = openStore(), antCommand }) {
+export async function runAudit({ taskId, auditor, store = openStore(), antCommand, hermesCommand }) {
   const task = store.getTask(taskId);
   if (!task) {
     throw new Error(`Task not found: ${taskId}`);
@@ -205,12 +260,23 @@ export async function runAudit({ taskId, auditor, store = openStore(), antComman
     title: `Shadow audit: ${task.title}`,
     store,
     antCommand,
+    hermesCommand,
     mode: "audit",
     parentTaskId: taskId
   });
 }
 
-export async function runDryRunAgent({ agent, goal, cwd = process.cwd(), sandboxCwd, store = openStore(), antCommand }) {
+export async function runDryRunAgent({
+  agent,
+  goal,
+  cwd = process.cwd(),
+  sandboxCwd,
+  store = openStore(),
+  antCommand,
+  tokenSaveMode = true,
+  prefilterMaxChars = 800,
+  complianceMode = "block"
+}) {
   assertSafeTaskPacket(goal);
   const resolvedSandboxCwd = sandboxCwd || (await createGitSandbox({ cwd }));
   if (agent === "all") {
@@ -222,7 +288,10 @@ export async function runDryRunAgent({ agent, goal, cwd = process.cwd(), sandbox
       meta: {
         real_cwd: cwd,
         sandbox_cwd: resolvedSandboxCwd
-      }
+      },
+      tokenSaveMode,
+      prefilterMaxChars,
+      complianceMode
     });
   }
   const packet = buildDryRunTaskPacket({ goal, realCwd: cwd, sandboxCwd: resolvedSandboxCwd });
@@ -305,9 +374,158 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
       }
       store.finishTask(task.id, { status, exitCode: code ?? 1 });
       publish("task", { ...task, status, exitCode: code ?? 1 });
-      resolve({ taskId: task.id, status, exitCode: code ?? 1 });
+      resolve({ taskId: task.id, status, exitCode: code ?? 1, output: combinedOutput });
     });
   });
+}
+
+async function runTokenSaveDiscussion({
+  goal,
+  cwd,
+  store,
+  mode,
+  meta,
+  prefilterMaxChars,
+  complianceMode,
+  hermesCommand,
+  antCommand
+}) {
+  assertSafeTaskPacket(goal);
+  const taskPacket = [
+    "# Token-save /all",
+    `Goal: ${goal}`,
+    "Phases: Hermes pre-filter, Antigravity alternative, Hermes joint proposal, Hermes compliance check.",
+    "Codex reads the final compact proposal and writes the final triagent note."
+  ].join("\n");
+  const task = store.createTask({
+    mode,
+    agent: "all",
+    cwd,
+    title: firstLine(goal),
+    taskPacket
+  });
+  for (const [key, value] of Object.entries(meta)) {
+    store.setTaskMeta(task.id, key, value);
+  }
+  store.setTaskMeta(task.id, "token_save_mode", "true");
+  store.setTaskMeta(task.id, "compliance_mode", complianceMode);
+  publish("task", task);
+
+  const prefilterPacket = buildPrefilterPacket({ goal, cwd, maxChars: prefilterMaxChars });
+  const prefilter = await runTaskPhase({
+    task,
+    store,
+    cwd,
+    agent: "hermes",
+    title: "Hermes pre-filter",
+    taskPacket: prefilterPacket,
+    hermesCommand,
+    antCommand
+  });
+  if (shouldStopPhase({ result: prefilter, task, store })) {
+    return finishStoppedPhase({ result: prefilter, task, store });
+  }
+  const prefilterSummary = truncateSummary(prefilter.output, prefilterMaxChars);
+  store.setTaskMeta(task.id, "prefilter_summary", prefilterSummary);
+
+  const alternativePacket = buildAlternativePacket({ goal, prefilterSummary });
+  const alternative = await runTaskPhase({
+    task,
+    store,
+    cwd,
+    agent: "ant",
+    title: "Antigravity alternative",
+    taskPacket: alternativePacket,
+    hermesCommand,
+    antCommand
+  });
+  if (shouldStopPhase({ result: alternative, task, store })) {
+    return finishStoppedPhase({ result: alternative, task, store });
+  }
+
+  const proposalPacket = buildJointProposalPacket({
+    goal,
+    prefilterSummary,
+    alternativeSummary: alternative.output
+  });
+  const proposal = await runTaskPhase({
+    task,
+    store,
+    cwd,
+    agent: "hermes",
+    title: "Hermes joint proposal",
+    taskPacket: proposalPacket,
+    hermesCommand,
+    antCommand
+  });
+  if (shouldStopPhase({ result: proposal, task, store })) {
+    return finishStoppedPhase({ result: proposal, task, store });
+  }
+  store.setTaskMeta(task.id, "joint_proposal", truncateSummary(proposal.output, 1600));
+
+  const compliancePacket = buildCompliancePacket({ proposal: proposal.output });
+  const compliance = await runTaskPhase({
+    task,
+    store,
+    cwd,
+    agent: "hermes",
+    title: "Hermes compliance check",
+    taskPacket: compliancePacket,
+    hermesCommand,
+    antCommand
+  });
+  if (shouldStopPhase({ result: compliance, task, store })) {
+    return finishStoppedPhase({ result: compliance, task, store });
+  }
+  store.setTaskMeta(task.id, "compliance_result", truncateSummary(compliance.output, 1600));
+  const complianceResult = evaluateComplianceOutput(compliance.output);
+  if (!complianceResult.ok && complianceMode !== "warn") {
+    store.finishTask(task.id, { status: "needs_compliance", exitCode: 0 });
+    publish("task", { ...task, status: "needs_compliance", exitCode: 0 });
+    store.close();
+    return { taskId: task.id, status: "needs_compliance" };
+  }
+
+  store.finishTask(task.id, { status: "needs_codex_review", exitCode: 0 });
+  publish("task", { ...task, status: "needs_codex_review", exitCode: 0 });
+  store.close();
+  return { taskId: task.id, status: "needs_codex_review" };
+}
+
+async function runTaskPhase({ task, store, cwd, agent, title, taskPacket, hermesCommand, antCommand }) {
+  assertSafeTaskPacket(taskPacket);
+  store.appendEvent({
+    taskId: task.id,
+    agent,
+    stream: "phase",
+    content: `${title}\n${taskPacket}`
+  });
+  publish("event", { taskId: task.id });
+
+  const command = buildAgentCommand({
+    agent,
+    taskPacket,
+    hermesCommand,
+    antCommand: agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined
+  });
+  store.appendEvent({
+    taskId: task.id,
+    agent,
+    stream: "system",
+    content: `$ ${command.cmd} ${command.args.map(shellQuote).join(" ")}`
+  });
+  return spawnTrackedProcess({ task, command, cwd, store, agent });
+}
+
+function shouldStopPhase({ result }) {
+  return result.status === "needs_clarification" || result.status === "needs_evidence" || result.exitCode !== 0;
+}
+
+function finishStoppedPhase({ result, task, store }) {
+  store.finishTask(task.id, { status: result.status, exitCode: result.exitCode ?? 1 });
+  publish("task", { ...task, status: result.status, exitCode: result.exitCode ?? 1 });
+  store.close();
+  return { taskId: task.id, status: result.status };
 }
 
 function recordProcessError({ task, store, agent, error }) {

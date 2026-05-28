@@ -19,8 +19,11 @@ triagent status
 triagent run hermes -- "Goal: inspect this project"
 triagent run ant -- "Goal: review this design"
 triagent run all -- "Design a safe migration plan"
+triagent run all --legacy -- "Use the old seven-phase /all flow"
+triagent run all --no-token-save -- "Disable token-save for this run"
 triagent run --dry-run hermes -- "Refactor safely in a sandbox"
 triagent reply <task-id> -- "Use the local dependency only."
+triagent reply --full-context <task-id> -- "Use the old full-context reply packet."
 triagent audit <task-id> --agent ant
 triagent apply <sandbox-task-id> --yes-risk
 triagent gc
@@ -56,6 +59,7 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - Common secrets are redacted before logs are stored.
 - The dashboard auto-refreshes while open. New tasks and new output pulse briefly so GuGU can see fresh dialogue without manual refresh.
 - SQLite uses WAL mode, a longer busy timeout, write retries, and log chunking to reduce dashboard crashes while `/all` is writing logs.
+- `triagent.config.json` can set `token_save_mode`, `prefilter_max_chars`, and `compliance_mode`.
 
 ## Version 0.2.0 Safety and Review Flow
 
@@ -85,6 +89,25 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - Applied sandboxes are eligible for cleanup. Old clean sandboxes become eligible after 7 days.
 - Successful Hermes or Antigravity output without evidence IDs now marks the task as `needs_evidence` for Codex review.
 - SQLite writes retry transient `SQLITE_BUSY` / `SQLITE_LOCKED` errors and split long stdout/stderr chunks before storing.
+
+## Version 0.3.2 Token Save Mode
+
+- `token_save_mode` is on by default for `/all`.
+- Default `/all` now runs: Hermes pre-filter, Antigravity alternative, Hermes joint proposal, Hermes compliance check, then Codex review.
+- Use `triagent run all --legacy -- "<goal>"` to keep the 0.3.1 seven-phase discussion.
+- Hermes pre-filter summaries are saved in `task_meta.prefilter_summary`; joint proposals are saved in `task_meta.joint_proposal`.
+- Compliance failures mark tasks as `needs_compliance` instead of sending noisy low-quality results to Codex.
+- `triagent reply` uses incremental context when a saved summary exists; `--full-context` restores the old full packet.
+
+Optional config:
+
+```json
+{
+  "token_save_mode": true,
+  "prefilter_max_chars": 800,
+  "compliance_mode": "block"
+}
+```
 
 ## Memory Files
 

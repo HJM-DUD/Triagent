@@ -32,3 +32,25 @@ export function buildClarificationPacket({ originalPacket, recentEvents = [], an
     "Continue the task using the clarification above. Keep the same deletion and evidence ID rules."
   ].join("\n");
 }
+
+export function buildIncrementalClarificationPacket({ taskId, summaryRef, recentEvents = [], answer, count }) {
+  const history = recentEvents
+    .slice(-4)
+    .map((event) => `${event.agent}:${event.stream}\n${String(event.content || "").slice(0, 500)}`)
+    .join("\n\n");
+
+  return [
+    `Incremental clarification reply ${count}/${MAX_CLARIFICATIONS}`,
+    `Parent task: ${taskId}`,
+    `Saved summary reference: ${summaryRef}`,
+    "Prior full context is persisted locally in Triagent. Use only this delta unless full context is explicitly requested.",
+    "",
+    "Recent delta events:",
+    history || "(no recent delta events)",
+    "",
+    "Codex/GuGU clarification answer:",
+    answer,
+    "",
+    "Continue the task using the clarification above. Keep the same deletion and evidence ID rules."
+  ].join("\n");
+}

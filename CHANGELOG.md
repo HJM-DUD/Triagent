@@ -2,6 +2,33 @@
 
 All notable Triagent version changes are recorded here. Before any future release or Git tag, update this file first.
 
+## 0.3.2 - 2026-05-28
+
+### Added
+- Added default `token_save_mode` for `/all`.
+- Added `triagent.config.json` support for `token_save_mode`, `prefilter_max_chars`, and `compliance_mode`.
+- Added `triagent run all --legacy`, `--token-save`, and `--no-token-save` routing flags.
+- Added Hermes pre-filter, Antigravity alternative review, Hermes joint proposal, and Hermes compliance check packets.
+- Added incremental `triagent reply` packets and `triagent reply --full-context` fallback.
+
+### Changed
+- Version upgraded to `0.3.2`.
+- Default `/all` now presents Codex with a compact joint proposal instead of the old seven-phase debate history.
+- Legacy `/all` remains available through `--legacy`.
+- Dashboard styling recognizes `needs_compliance`.
+
+### Safety
+- Compliance failures are blocked as `needs_compliance` instead of being accepted for Codex review.
+- Node.js deletion and evidence gates remain active before and after token-save phases.
+- Original raw output is still stored locally in SQLite, but Codex-facing packets prefer summaries and deltas.
+
+### Tests
+- `npm test`: 43 tests passing.
+
+### Known Limits
+- Triagent cannot intercept Codex App's internal stdin; token saving applies to Triagent-generated packets, reports, and handoff summaries.
+- Hermes semantic compliance is still model-assisted and should be reviewed by Codex before final acceptance.
+
 ## 0.3.1 - 2026-05-27
 
 ### Added

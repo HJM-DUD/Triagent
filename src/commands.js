@@ -17,11 +17,11 @@ export function resolveAntigravityCommand(hasCommand = defaultHasCommand) {
   return "agy";
 }
 
-export function buildAgentCommand({ agent, taskPacket, edit = false, antCommand }) {
+export function buildAgentCommand({ agent, taskPacket, edit = false, antCommand, hermesCommand }) {
   if (agent === "hermes") {
     if (edit) {
       return {
-        cmd: "hermes",
+        cmd: hermesCommand || "hermes",
         args: [
           "chat",
           "-Q",
@@ -39,7 +39,7 @@ export function buildAgentCommand({ agent, taskPacket, edit = false, antCommand 
     }
 
     return {
-      cmd: "hermes",
+      cmd: hermesCommand || "hermes",
       args: ["-z", taskPacket, "--provider", "deepseek", "--model", "deepseek-v4-pro"]
     };
   }

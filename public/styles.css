@@ -227,6 +227,10 @@ h3 {
   color: var(--yellow);
 }
 
+.needs_compliance {
+  color: var(--yellow);
+}
+
 @media (max-width: 860px) {
   .shell,
   .panes {
