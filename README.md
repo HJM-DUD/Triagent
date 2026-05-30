@@ -58,6 +58,7 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - The project does not batch-delete log files.
 - Common secrets are redacted before logs are stored.
 - The dashboard auto-refreshes while open. New tasks and new output pulse briefly so GuGU can see fresh dialogue without manual refresh.
+- The dashboard frontend is static HTML/CSS/JS in `public/`. Version 0.3.4 uses a dark AI command-center visual style, bounded task stream, all-task toggle, date/time task stamps, grouped raw-output reading blocks, and reduced-motion support.
 - SQLite uses WAL mode, a longer busy timeout, write retries, and log chunking to reduce dashboard crashes while `/all` is writing logs.
 - `triagent.config.json` can set `token_save_mode`, `prefilter_max_chars`, and `compliance_mode`.
 
@@ -108,6 +109,15 @@ Optional config:
   "compliance_mode": "block"
 }
 ```
+
+## Version 0.3.4 Dashboard UX
+
+- The dashboard keeps the same read-only APIs and CLI behavior.
+- `public/index.html` defines the observer shell, task stream, task packet pane, and raw output pane.
+- `public/app.js` keeps the WebSocket/auto-refresh data flow, shows the latest 8 tasks by default, keeps the selected older task visible, and lets GuGU toggle all tasks.
+- `public/app.js` also groups consecutive SQLite log chunks with the same `agent` and `stream` into one readable raw-output block.
+- `public/styles.css` owns the dark AI command-center theme, compact task cards, grouped raw-output reading blocks, scrollable long output, responsive layout, and `prefers-reduced-motion` fallback.
+- No backend, SQLite, runner, task status, or subagent workflow behavior changed in 0.3.4.
 
 ## Memory Files
 

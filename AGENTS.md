@@ -24,7 +24,7 @@ Codex 是主脑，Hermes 和 Antigravity CLI 是子agent。正式子agent任务�
 
 核心命令：
 - `triagent dashboard`：启动只读网页观察台。
-- `triagent status`：查看最近任务。
+- `triagent status`：查看任务列表。
 - `triagent run hermes -- "<任务包>"`：记录并启动 Hermes。
 - `triagent run ant -- "<任务包>"`：记录并启动 Antigravity；当前已确认实际底层命令为 `agy --print`。
 - `triagent run all -- "<目标>"`：默认启动 0.3.2 省 token 流程：Hermes 前置过滤、Antigravity 备选视角、Hermes 联合提案、Hermes 合规检查、Codex 最终裁决。
@@ -72,6 +72,8 @@ Antigravity 适合长上下文、多模态、Google 生态、前端/原型、替
 ## 观察台与安全
 
 仪表盘只显示本地日志，不调用模型，不消耗 token。子agent stdout/stderr 默认只进入网页和 SQLite，不刷屏到当前终端。
+
+Web 端是 `public/` 下的纯 HTML/CSS/JS；0.3.4 的 dashboard UX 只改前端，不改变 dashboard API、runner、SQLite 或子agent流程。任务流默认显示最新 8 条并可切换全部；原始输出要合并连续同源 log chunk，长输出必须可滚动且不能裁切。
 
 子agent任务包必须包含删除规则、当前工作目录、是否允许编辑、允许路径、输出格式和停止条件。允许编辑时要限域；Codex 必须审查 diff、运行或判断验证命令，再向 GuGU 汇报。
 

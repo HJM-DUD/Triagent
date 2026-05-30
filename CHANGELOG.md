@@ -2,6 +2,62 @@
 
 All notable Triagent version changes are recorded here. Before any future release or Git tag, update this file first.
 
+## 0.3.4 - 2026-05-31
+
+### Changed
+- Version upgraded to `0.3.4`.
+- Dashboard task stream now renders a bounded recent task set instead of every stored task.
+- Task cards are more compact, with two-line title clamping and a visible task count chip.
+- Task card timestamps now include date and time.
+- Added a task stream toggle so older hidden tasks remain accessible from the dashboard.
+- Redesigned the task packet and raw output panes for better readability.
+
+### UX
+- Prevents the left task stream from growing into an oversized card wall during long sessions.
+- Keeps an older selected task visible if GuGU is reviewing it while newer tasks continue to arrive.
+- Makes task history easier to scan across different days.
+- Lets GuGU switch between latest-only and all-task views without changing backend data.
+- Raw output is now grouped into event cards with agent, stream, and timestamp metadata.
+- Task packet and output text use larger type, more line spacing, and stronger contrast.
+- Consecutive SQLite log chunks from the same agent and stream are merged into a single readable block.
+- Grouped raw-output blocks now use normal document flow so long blocks are scrollable and not clipped.
+
+### Safety
+- No command, API, database, runner, or subagent workflow behavior changed in this release.
+
+### Tests
+- `npm test`: 43 tests passing.
+- Browser check: task stream renders 8 visible cards out of 31 stored tasks by default, the all-task toggle expands to 31 cards and collapses back, timestamps include date and time, and no horizontal overflow was detected.
+- Browser check: raw output renders as 3 grouped reading blocks instead of 25 chunk cards, with 14px text, roughly 25px line height, scrollable long-block content, and no horizontal overflow.
+- Browser check: raw output viewport is scrollable (`scrollHeight 6558 / clientHeight 689`) and the final grouped block remains reachable.
+
+### Known Limits
+- Older tasks are accessible through the all-task toggle, but task search/filtering is not implemented yet.
+
+## 0.3.3 - 2026-05-31
+
+### Changed
+- Version upgraded to `0.3.3`.
+- Redesigned the read-only dashboard as a dark AI command center while keeping the existing dashboard APIs and CLI behavior unchanged.
+- Improved task list hierarchy with agent labels, task mode chips, timestamps, selected states, and status rails.
+- Improved task detail and output panels with clearer headers, stronger contrast, and a more readable terminal surface.
+
+### UX
+- Added more distinct visual states for `running`, `succeeded`, `failed`, `needs_evidence`, `needs_compliance`, `needs_clarification`, and `needs_codex_review`.
+- Refined new-task and new-output motion so updates feel visible without disrupting log reading.
+- Added responsive layout treatment for mobile, tablet, and desktop dashboard widths.
+- Added reduced-motion handling for users who disable interface animation.
+
+### Safety
+- No command, API, database, runner, or subagent workflow behavior changed in this release.
+- Browser Apply remains a copy-command affordance when `triagent dashboard --enable-actions` is used.
+
+### Tests
+- `npm test`: 43 tests passing.
+
+### Known Limits
+- This release is visual-only and does not add dashboard filtering, searching, or direct browser actions.
+
 ## 0.3.2 - 2026-05-28
 
 ### Added
