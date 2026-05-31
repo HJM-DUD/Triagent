@@ -125,3 +125,38 @@ test("stores task metadata for 0.3 workflows", async () => {
     await rmdir(dir).catch(() => {});
   }
 });
+
+test("stores v0.4 routing and queue fields without breaking older task shape", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "triagent-store-"));
+  const dbPath = join(dir, "triagent.sqlite");
+  try {
+    const store = new TriagentStore(dbPath);
+    const task = store.createTask({
+      mode: "queued",
+      agent: "hermes",
+      cwd: "/tmp/project",
+      title: "Queued task",
+      taskPacket: "Goal: queued",
+      priority: 80,
+      attempt: 2,
+      maxAttempts: 3,
+      routeAgent: "hermes",
+      routeReason: "prefix /her",
+      riskLevel: "low"
+    });
+
+    const listed = store.listTasks()[0];
+
+    assert.equal(listed.id, task.id);
+    assert.equal(listed.priority, 80);
+    assert.equal(listed.attempt, 2);
+    assert.equal(listed.maxAttempts, 3);
+    assert.equal(listed.routeAgent, "hermes");
+    assert.equal(listed.routeReason, "prefix /her");
+    assert.equal(listed.riskLevel, "low");
+    store.close();
+  } finally {
+    await unlink(dbPath).catch(() => {});
+    await rmdir(dir).catch(() => {});
+  }
+});

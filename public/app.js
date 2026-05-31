@@ -14,6 +14,10 @@ const connection = document.querySelector("#connection");
 const selectedAgent = document.querySelector("#selected-agent");
 const selectedTitle = document.querySelector("#selected-title");
 const selectedStatus = document.querySelector("#selected-status");
+const selectedRoute = document.querySelector("#selected-route");
+const selectedRisk = document.querySelector("#selected-risk");
+const selectedAttempt = document.querySelector("#selected-attempt");
+const selectedCwd = document.querySelector("#selected-cwd");
 const taskPacket = document.querySelector("#task-packet");
 const eventsEl = document.querySelector("#events");
 const applyCommand = document.querySelector("#apply-command");
@@ -30,7 +34,7 @@ applyCommand.addEventListener("click", async () => {
   await navigator.clipboard.writeText(`triagent apply ${selectedId} --yes-risk`);
   applyCommand.textContent = "Copied";
   setTimeout(() => {
-    applyCommand.textContent = "Apply";
+    applyCommand.textContent = "复制 apply 命令";
   }, 1200);
 });
 
@@ -107,6 +111,9 @@ function renderTasks() {
       <span class="task-title">${escapeHtml(task.title)}</span>
       <span class="task-meta">
         <span class="task-mode">${escapeHtml(task.mode)}</span>
+        <span class="task-route">${escapeHtml(routeLabel(task))}</span>
+        <span class="task-risk ${riskClass(task)}">${escapeHtml(riskLabel(task))}</span>
+        <span class="task-attempt">${escapeHtml(attemptLabel(task))}</span>
         <span class="task-state ${statusClass}">${escapeHtml(formatStatus(task.status))}</span>
       </span>
     `;
@@ -154,12 +161,7 @@ async function selectTask(taskId) {
     return;
   }
 
-  selectedAgent.textContent = `${task.agent} · ${task.mode} · ${task.cwd}`;
-  selectedTitle.textContent = task.title;
-  selectedStatus.textContent = formatStatus(task.status);
-  selectedStatus.className = `status ${normalizeStatusClass(task.status)}`;
-  taskPacket.textContent = task.taskPacket;
-  updateActionVisibility(task);
+  updateSelectedTaskView(task);
   await renderEvents(task.id);
 }
 
@@ -233,13 +235,22 @@ function refreshSelectedTask() {
   if (!task) {
     return;
   }
-  selectedAgent.textContent = `${task.agent} · ${task.mode} · ${task.cwd}`;
+  updateSelectedTaskView(task);
+  renderEvents(task.id);
+}
+
+function updateSelectedTaskView(task) {
+  selectedAgent.textContent = selectedMeta(task);
   selectedTitle.textContent = task.title;
   selectedStatus.textContent = formatStatus(task.status);
   selectedStatus.className = `status ${normalizeStatusClass(task.status)}`;
+  selectedRoute.textContent = routeLabel(task);
+  selectedRisk.textContent = riskLabel(task);
+  selectedRisk.className = riskClass(task);
+  selectedAttempt.textContent = attemptLabel(task);
+  selectedCwd.textContent = task.cwd || "-";
   taskPacket.textContent = task.taskPacket;
   updateActionVisibility(task);
-  renderEvents(task.id);
 }
 
 function startAutoRefresh() {
@@ -268,6 +279,29 @@ function normalizeStatusClass(status) {
 
 function formatStatus(status) {
   return String(status || "idle").replaceAll("_", " ");
+}
+
+function selectedMeta(task) {
+  return `${task.agent} / ${task.mode} / ${task.cwd || "-"}`;
+}
+
+function routeLabel(task) {
+  return task.routeAgent || task.agent;
+}
+
+function riskLabel(task) {
+  return task.riskLevel || "low";
+}
+
+function riskClass(task) {
+  return `risk-${normalizeStatusClass(riskLabel(task))}`;
+}
+
+function attemptLabel(task) {
+  if (task.attempt && task.maxAttempts) {
+    return `${task.attempt}/${task.maxAttempts}`;
+  }
+  return "1/2";
 }
 
 function formatTime(value) {

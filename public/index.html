@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Triagent Observer</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/dashboard.css">
   </head>
   <body>
     <main class="shell">
@@ -13,14 +13,14 @@
           <div class="brand-lockup">
             <span class="brand-mark" aria-hidden="true"></span>
             <div>
-              <p class="eyebrow">AI Command Center</p>
+              <p class="eyebrow">本地观察台</p>
               <h1>Triagent</h1>
             </div>
           </div>
           <span id="connection" class="badge connection-badge">connecting</span>
         </header>
         <div class="sidebar-label">
-          <span>任务流</span>
+          <span>任务队列</span>
           <span id="task-count" class="task-count">0 shown</span>
           <button id="task-toggle" class="task-toggle" type="button" hidden>全部</button>
           <span class="label-line" aria-hidden="true"></span>
@@ -30,27 +30,45 @@
       <section class="workspace">
         <header class="detail-header">
           <div class="detail-copy">
-            <p class="eyebrow">当前观察目标</p>
+            <p class="eyebrow">当前任务</p>
             <h2 id="selected-title">等待子agent任务</h2>
             <p id="selected-agent" class="meta">未选择任务</p>
           </div>
           <div class="detail-actions">
-            <button id="apply-command" class="action-button" type="button" hidden>Apply</button>
+            <button id="apply-command" class="action-button" type="button" hidden>复制 apply 命令</button>
             <span id="selected-status" class="status">idle</span>
           </div>
         </header>
+        <section class="metric-strip" aria-label="任务路由摘要">
+          <div class="metric">
+            <span>路线</span>
+            <strong id="selected-route">-</strong>
+          </div>
+          <div class="metric">
+            <span>风险</span>
+            <strong id="selected-risk">-</strong>
+          </div>
+          <div class="metric">
+            <span>重试</span>
+            <strong id="selected-attempt">-</strong>
+          </div>
+          <div class="metric metric-wide">
+            <span>目录</span>
+            <strong id="selected-cwd">-</strong>
+          </div>
+        </section>
         <section class="panes">
           <article class="pane">
             <header class="pane-header">
               <h3>任务包</h3>
-              <span>Task Packet</span>
+              <span>Packet</span>
             </header>
             <pre id="task-packet" class="terminal packet-terminal muted">选择左侧任务后显示</pre>
           </article>
           <article class="pane output-pane">
             <header class="pane-header">
               <h3>原始输出</h3>
-              <span>Raw Stream</span>
+              <span>Stream</span>
             </header>
             <div id="events" class="terminal event-stream" aria-live="polite"></div>
           </article>

@@ -2,6 +2,40 @@
 
 All notable Triagent version changes are recorded here. Before any future release or Git tag, update this file first.
 
+## 0.4.0 - 2026-05-31
+
+### Added
+- Added `triagent check [--json] [--task <task>]` to preview local config validity, routing, and risk level without launching an agent.
+- Added `triagent config show|get|set|validate [--json]` for local `triagent.config.json` management.
+- Added `triagent run auto -- "<task>"` with `/co`, `/her`, `/ant`, and `/all` prefix routing plus task-type fallback routing.
+- Added a schema v1 `triagent.config.json` shape for defaults, agent commands, routing prefixes/rules, and safety switches while keeping legacy config keys compatible.
+- Added local queue helpers for priority ordering and conservative retry decisions.
+- Added SQLite task fields for priority, attempt count, max attempts, route agent, route reason, risk level, and run-after time.
+- Added dashboard route, risk, and attempt labels for task cards and selected task summary metrics.
+
+### Changed
+- Version upgraded to `0.4.0`.
+- `triagent status --json` now exposes the richer task shape for scripts and dashboard consumers.
+- Safety classification now reports `low`, `medium`, `high`, or `blocked` with a concrete reason.
+- Dashboard visual design changed from the old neon command-center treatment to a quieter local workspace with denser task scanning, clearer metrics, and less decorative chrome.
+
+### Safety
+- Recursive and batch deletion commands remain blocked before any subagent call.
+- High-risk and medium-risk tasks still require terminal confirmation, or `--yes-risk` in non-interactive runs after GuGU confirms.
+- `needs_clarification`, `needs_evidence`, and `needs_compliance` are not auto-retryable.
+- The new router is purely local and does not add any cloud dependency.
+
+### Tests
+- `npm test`: 57 tests passing.
+- `git diff --check`: passing.
+- Manual CLI checks passed: `triagent check --json --task "/all plan a safe production migration"` and `triagent config validate --json`.
+- Dashboard visual check passed in Chrome at desktop width and 390px mobile width with no horizontal overflow.
+
+### Known Limits
+- Queue helpers are local building blocks in 0.4.0; there is no long-running daemon loop yet.
+- `triagent run auto` records `/co` tasks for Codex review but cannot make Codex App execute them automatically.
+- Antigravity model selection remains controlled by the user's Antigravity CLI settings.
+
 ## 0.3.4 - 2026-05-31
 
 ### Changed

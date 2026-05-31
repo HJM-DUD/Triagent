@@ -50,9 +50,24 @@ export class TriagentStore {
       CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_events_task_id ON events(task_id, created_at);
     `);
+    this.ensureV04Columns();
   }
 
-  createTask({ mode, agent, cwd, title, taskPacket }) {
+  createTask({
+    mode,
+    agent,
+    cwd,
+    title,
+    taskPacket,
+    status = "running",
+    priority = 50,
+    attempt = 1,
+    maxAttempts = 2,
+    routeAgent = agent,
+    routeReason = "",
+    riskLevel = "low",
+    runAfter
+  }) {
     const now = new Date().toISOString();
     const task = {
       id: randomUUID(),
@@ -60,8 +75,15 @@ export class TriagentStore {
       agent,
       cwd,
       title,
-      status: "running",
+      status,
       taskPacket: redactSecrets(taskPacket),
+      priority,
+      attempt,
+      maxAttempts,
+      routeAgent,
+      routeReason,
+      riskLevel,
+      runAfter: runAfter || now,
       createdAt: now,
       updatedAt: now
     };
@@ -69,8 +91,10 @@ export class TriagentStore {
       this.db
         .prepare(
           `INSERT INTO tasks
-            (id, mode, agent, cwd, title, status, task_packet, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            (id, mode, agent, cwd, title, status, task_packet,
+             priority, attempt, max_attempts, route_agent, route_reason, risk_level, run_after,
+             created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           task.id,
@@ -80,6 +104,13 @@ export class TriagentStore {
           task.title,
           task.status,
           task.taskPacket,
+          task.priority,
+          task.attempt,
+          task.maxAttempts,
+          task.routeAgent,
+          task.routeReason,
+          task.riskLevel,
+          task.runAfter,
           task.createdAt,
           task.updatedAt
         );
@@ -166,7 +197,9 @@ export class TriagentStore {
     return this.db
       .prepare(
         `SELECT id, mode, agent, cwd, title, status, task_packet AS taskPacket,
-                exit_code AS exitCode, created_at AS createdAt,
+                exit_code AS exitCode, priority, attempt, max_attempts AS maxAttempts,
+                route_agent AS routeAgent, route_reason AS routeReason,
+                risk_level AS riskLevel, run_after AS runAfter, created_at AS createdAt,
                 updated_at AS updatedAt, finished_at AS finishedAt
          FROM tasks
          ORDER BY created_at DESC
@@ -179,7 +212,9 @@ export class TriagentStore {
     return this.db
       .prepare(
         `SELECT id, mode, agent, cwd, title, status, task_packet AS taskPacket,
-                exit_code AS exitCode, created_at AS createdAt,
+                exit_code AS exitCode, priority, attempt, max_attempts AS maxAttempts,
+                route_agent AS routeAgent, route_reason AS routeReason,
+                risk_level AS riskLevel, run_after AS runAfter, created_at AS createdAt,
                 updated_at AS updatedAt, finished_at AS finishedAt
          FROM tasks
          WHERE id = ?`
@@ -191,7 +226,9 @@ export class TriagentStore {
     const tasks = this.db
       .prepare(
         `SELECT id, mode, agent, cwd, title, status, task_packet AS taskPacket,
-                exit_code AS exitCode, created_at AS createdAt,
+                exit_code AS exitCode, priority, attempt, max_attempts AS maxAttempts,
+                route_agent AS routeAgent, route_reason AS routeReason,
+                risk_level AS riskLevel, run_after AS runAfter, created_at AS createdAt,
                 updated_at AS updatedAt, finished_at AS finishedAt
          FROM tasks
          WHERE updated_at > ?
@@ -208,6 +245,22 @@ export class TriagentStore {
       .all(sinceIso);
 
     return { tasks, events };
+  }
+
+  nextQueuedTask(nowIso = new Date().toISOString()) {
+    return this.db
+      .prepare(
+        `SELECT id, mode, agent, cwd, title, status, task_packet AS taskPacket,
+                exit_code AS exitCode, priority, attempt, max_attempts AS maxAttempts,
+                route_agent AS routeAgent, route_reason AS routeReason,
+                risk_level AS riskLevel, run_after AS runAfter, created_at AS createdAt,
+                updated_at AS updatedAt, finished_at AS finishedAt
+         FROM tasks
+         WHERE status = 'queued' AND run_after <= ?
+         ORDER BY priority DESC, created_at ASC
+         LIMIT 1`
+      )
+      .get(nowIso);
   }
 
   setTaskMeta(taskId, key, value) {
@@ -254,5 +307,26 @@ export class TriagentStore {
 
   write(operation) {
     return runWithSqliteRetry(operation);
+  }
+
+  ensureV04Columns() {
+    const columns = new Set(this.db.prepare("PRAGMA table_info(tasks)").all().map((column) => column.name));
+    const additions = [
+      ["priority", "INTEGER NOT NULL DEFAULT 50"],
+      ["attempt", "INTEGER NOT NULL DEFAULT 1"],
+      ["max_attempts", "INTEGER NOT NULL DEFAULT 2"],
+      ["route_agent", "TEXT NOT NULL DEFAULT ''"],
+      ["route_reason", "TEXT NOT NULL DEFAULT ''"],
+      ["risk_level", "TEXT NOT NULL DEFAULT 'low'"],
+      ["run_after", "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z'"]
+    ];
+    for (const [name, type] of additions) {
+      if (!columns.has(name)) {
+        this.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${type};`);
+      }
+    }
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_tasks_queue ON tasks(status, priority DESC, run_after, created_at);"
+    );
   }
 }

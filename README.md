@@ -16,6 +16,15 @@ npm test
 triagent dashboard
 triagent dashboard --enable-actions
 triagent status
+triagent status --json
+triagent check --task "/her inspect this project"
+triagent check --json --task "/all plan a safe migration"
+triagent config show
+triagent config show --json
+triagent config validate
+triagent config get defaults.priority
+triagent config set defaults.priority 70
+triagent run auto -- "/her inspect this project"
 triagent run hermes -- "Goal: inspect this project"
 triagent run ant -- "Goal: review this design"
 triagent run all -- "Design a safe migration plan"
@@ -49,7 +58,9 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - `/her <task>`: Codex delegates to Hermes through `triagent run hermes`.
 - `/ant <task>`: Codex delegates to Antigravity through `triagent run ant`.
 - `/all <task>`: Codex starts the three-agent discussion and cross-check workflow.
-- No prefix: Codex chooses the route. High-risk work still needs GuGU confirmation.
+- `triagent run auto -- "<task>"`: Triagent applies the same local route rules before launching a subagent or recording a Codex-review task.
+- No prefix: Triagent uses local rules first. Hermes is preferred for code/log/test inspection, Antigravity for UI/product/alternative analysis, `/all` for architecture, migration, production, credential, deletion, or other high-risk work. Otherwise Codex keeps the task.
+- High-risk work still needs GuGU confirmation or `--yes-risk` in non-interactive runs.
 
 ## Data
 
@@ -58,9 +69,48 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - The project does not batch-delete log files.
 - Common secrets are redacted before logs are stored.
 - The dashboard auto-refreshes while open. New tasks and new output pulse briefly so GuGU can see fresh dialogue without manual refresh.
-- The dashboard frontend is static HTML/CSS/JS in `public/`. Version 0.3.4 uses a dark AI command-center visual style, bounded task stream, all-task toggle, date/time task stamps, grouped raw-output reading blocks, and reduced-motion support.
+- The dashboard frontend is static HTML/CSS/JS in `public/`. Version 0.4.0 uses a restrained local workspace visual style, bounded task stream, all-task toggle, date/time task stamps, route/risk/retry summary metrics, grouped raw-output reading blocks, and reduced-motion support.
 - SQLite uses WAL mode, a longer busy timeout, write retries, and log chunking to reduce dashboard crashes while `/all` is writing logs.
-- `triagent.config.json` can set `token_save_mode`, `prefilter_max_chars`, and `compliance_mode`.
+- `triagent.config.json` supports the legacy `token_save_mode`, `prefilter_max_chars`, and `compliance_mode` keys, plus the 0.4.0 schema with defaults, agent commands, routing prefixes/rules, and safety switches.
+
+Example 0.4.0 config:
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "route": "auto",
+    "priority": 50,
+    "max_attempts": 2,
+    "retry_backoff_ms": [1000, 5000],
+    "token_save_mode": true,
+    "prefilter_max_chars": 800,
+    "compliance_mode": "block"
+  },
+  "agents": {
+    "hermes": { "enabled": true, "command": "hermes", "model": "deepseek-v4-pro" },
+    "ant": { "enabled": true, "command": "agy" }
+  },
+  "routing": {
+    "prefixes": { "/her": "hermes", "/ant": "ant", "/all": "all", "/co": "codex" },
+    "rules": []
+  },
+  "safety": {
+    "confirm_high_risk": true,
+    "block_dangerous_commands": true
+  }
+}
+```
+
+## Version 0.4.0 Local Routing
+
+- Added `triagent check` for a no-run preview of config validity, route choice, and risk level.
+- Added `triagent config show|get|set|validate` for local JSON config management.
+- Added `triagent run auto -- "<task>"` for prefix-based and task-type-based local routing.
+- Added local route metadata, priority, attempt count, max attempts, risk level, and queue-ready fields to SQLite task rows.
+- Redesigned the dashboard as a quieter local workspace and added route/risk/attempt labels while keeping the existing dashboard APIs compatible.
+- `public/dashboard.css` owns the current dashboard visual system; `public/index.html` no longer links the older `public/styles.css` theme.
+- Added a small local queue helper that returns runnable tasks by priority and only retries plain failed process attempts below `max_attempts`.
 
 ## Version 0.2.0 Safety and Review Flow
 
@@ -110,13 +160,13 @@ Optional config:
 }
 ```
 
-## Version 0.3.4 Dashboard UX
+## Version 0.3.4 Dashboard UX Foundation
 
 - The dashboard keeps the same read-only APIs and CLI behavior.
 - `public/index.html` defines the observer shell, task stream, task packet pane, and raw output pane.
 - `public/app.js` keeps the WebSocket/auto-refresh data flow, shows the latest 8 tasks by default, keeps the selected older task visible, and lets GuGU toggle all tasks.
 - `public/app.js` also groups consecutive SQLite log chunks with the same `agent` and `stream` into one readable raw-output block.
-- `public/styles.css` owns the dark AI command-center theme, compact task cards, grouped raw-output reading blocks, scrollable long output, responsive layout, and `prefers-reduced-motion` fallback.
+- `public/styles.css` was the 0.3.4 visual theme. Version 0.4.0 keeps the data flow and switches the active stylesheet to `public/dashboard.css`.
 - No backend, SQLite, runner, task status, or subagent workflow behavior changed in 0.3.4.
 
 ## Memory Files

@@ -1,6 +1,6 @@
 {
   "name": "triagent",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "Local Codex, Hermes, and Antigravity orchestration dashboard.",
   "type": "module",
   "bin": {
