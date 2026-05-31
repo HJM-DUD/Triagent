@@ -48,7 +48,13 @@ export async function runSingleAgent({
   mode = "single",
   parentTaskId,
   meta = {},
-  hermesCommand
+  hermesCommand,
+  priority = 50,
+  attempt = 1,
+  maxAttempts = 2,
+  routeAgent,
+  routeReason = "",
+  riskLevel = "low"
 }) {
   const normalizedAgent = agent === "antigravity" ? "ant" : agent;
   const packet = taskPacket || buildTaskPacket({ goal, cwd, edit });
@@ -65,7 +71,13 @@ export async function runSingleAgent({
     agent: normalizedAgent,
     cwd,
     title: title || firstLine(goal || packet),
-    taskPacket: packet
+    taskPacket: packet,
+    priority,
+    attempt,
+    maxAttempts,
+    routeAgent: routeAgent || normalizedAgent,
+    routeReason,
+    riskLevel
   });
   if (parentTaskId) {
     store.setTaskMeta(task.id, "parent_task_id", parentTaskId);
@@ -97,7 +109,11 @@ export async function runAllDiscussion({
   prefilterMaxChars = 800,
   complianceMode = "block",
   hermesCommand,
-  antCommand
+  antCommand,
+  priority = 50,
+  maxAttempts = 2,
+  routeReason = "",
+  riskLevel = "low"
 }) {
   if (tokenSaveMode) {
     return runTokenSaveDiscussion({
@@ -109,7 +125,11 @@ export async function runAllDiscussion({
       prefilterMaxChars,
       complianceMode,
       hermesCommand,
-      antCommand
+      antCommand,
+      priority,
+      maxAttempts,
+      routeReason,
+      riskLevel
     });
   }
 
@@ -122,7 +142,12 @@ export async function runAllDiscussion({
     agent: "all",
     cwd,
     title: firstLine(goal),
-    taskPacket: phases.map((phase, index) => `# ${index + 1}. ${phase.title}\n${phase.taskPacket}`).join("\n\n")
+    taskPacket: phases.map((phase, index) => `# ${index + 1}. ${phase.title}\n${phase.taskPacket}`).join("\n\n"),
+    priority,
+    maxAttempts,
+    routeAgent: "all",
+    routeReason,
+    riskLevel
   });
   for (const [key, value] of Object.entries(meta)) {
     store.setTaskMeta(task.id, key, value);
@@ -388,7 +413,11 @@ async function runTokenSaveDiscussion({
   prefilterMaxChars,
   complianceMode,
   hermesCommand,
-  antCommand
+  antCommand,
+  priority = 50,
+  maxAttempts = 2,
+  routeReason = "",
+  riskLevel = "low"
 }) {
   assertSafeTaskPacket(goal);
   const taskPacket = [
@@ -402,7 +431,12 @@ async function runTokenSaveDiscussion({
     agent: "all",
     cwd,
     title: firstLine(goal),
-    taskPacket
+    taskPacket,
+    priority,
+    maxAttempts,
+    routeAgent: "all",
+    routeReason,
+    riskLevel
   });
   for (const [key, value] of Object.entries(meta)) {
     store.setTaskMeta(task.id, key, value);

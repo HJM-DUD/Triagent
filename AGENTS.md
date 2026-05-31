@@ -25,6 +25,10 @@ Codex 是主脑，Hermes 和 Antigravity CLI 是子agent。正式子agent任务�
 核心命令：
 - `triagent dashboard`：启动只读网页观察台。
 - `triagent status`：查看任务列表。
+- `triagent status --json`：输出脚本可读的任务列表。
+- `triagent check --task "<任务>"`：只预览配置、路由和风险，不启动子agent。
+- `triagent config show|get|set|validate`：管理本地 `triagent.config.json`。
+- `triagent run auto -- "<任务>"`：按前缀和本地规则自动路由。
 - `triagent run hermes -- "<任务包>"`：记录并启动 Hermes。
 - `triagent run ant -- "<任务包>"`：记录并启动 Antigravity；当前已确认实际底层命令为 `agy --print`。
 - `triagent run all -- "<目标>"`：默认启动 0.3.2 省 token 流程：Hermes 前置过滤、Antigravity 备选视角、Hermes 联合提案、Hermes 合规检查、Codex 最终裁决。
@@ -73,7 +77,7 @@ Antigravity 适合长上下文、多模态、Google 生态、前端/原型、替
 
 仪表盘只显示本地日志，不调用模型，不消耗 token。子agent stdout/stderr 默认只进入网页和 SQLite，不刷屏到当前终端。
 
-Web 端是 `public/` 下的纯 HTML/CSS/JS；0.3.4 的 dashboard UX 只改前端，不改变 dashboard API、runner、SQLite 或子agent流程。任务流默认显示最新 8 条并可切换全部；原始输出要合并连续同源 log chunk，长输出必须可滚动且不能裁切。
+Web 端是 `public/` 下的纯 HTML/CSS/JS；0.4.0 当前页面由 `public/index.html`、`public/app.js` 和 `public/dashboard.css` 组成，不改变 dashboard API、runner、SQLite 或子agent流程。任务流默认显示最新 8 条并可切换全部；详情区必须显示路线、风险、重试和目录摘要；原始输出要合并连续同源 log chunk，长输出必须可滚动且不能裁切。
 
 子agent任务包必须包含删除规则、当前工作目录、是否允许编辑、允许路径、输出格式和停止条件。允许编辑时要限域；Codex 必须审查 diff、运行或判断验证命令，再向 GuGU 汇报。
 
@@ -81,7 +85,7 @@ Hermes 或 Antigravity 成功退出但输出没有 `[E1]`、`[E2]` 等证据 ID 
 
 Hermes 合规检查返回 `FAIL` 时，Triagent 会把任务标记为 `needs_compliance`。Codex 不能直接采纳该输出，必须复核红线、证据映射和验证缺口，再决定补证据、改任务包或重跑。
 
-项目可用 `triagent.config.json` 配置 `token_save_mode`、`prefilter_max_chars` 和 `compliance_mode`。CLI 参数优先于配置文件。
+项目可用 `triagent.config.json` 配置旧键 `token_save_mode`、`prefilter_max_chars`、`compliance_mode`，也支持 0.4.0 schema v1 的 defaults、agents、routing、safety。CLI 参数优先于配置文件。
 
 dry-run 沙盒不会偷偷自动删除。需要释放空间时先运行 `triagent gc` 查看预览；确认无误后再运行 `triagent gc --apply`。该命令只处理 Triagent 记录过的 Git worktree，并使用 Git 原生命令清理。
 
