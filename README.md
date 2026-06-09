@@ -119,6 +119,21 @@ Example schema v1 config:
 }
 ```
 
+## Version 0.5.1 Codex CLI Compatibility
+
+- Codex subagent commands no longer pass the deprecated `--ask-for-approval never` argument, matching `codex-cli 0.137.0`.
+- `/all` phase subprocesses no longer mark the parent task complete before the full multi-agent flow finishes.
+- Clarification detection now reads the final agent stdout only, so `[NEED_CLARIFY]` examples in stderr logs or tool output do not falsely mark tasks as `needs_clarification`.
+- Codex subagent child processes default to `RUST_LOG=off` to suppress noisy plugin and skill loader WARN lines. Use `TRIAGENT_CODEX_RUST_LOG` when debugging Codex CLI internals.
+
+## Version 0.5.0 Codex Subagent
+
+- Added `/so <task>` and `triagent run so -- "<task>"` for launching a Codex CLI subagent while keeping `/co` as the lead Codex personal route.
+- Added `agents.codex_subagent` config and `/so` routing defaults.
+- Default `/all` now includes Hermes pre-filter, Codex subagent engineering review, Antigravity alternative, Hermes joint proposal, Codex subagent compliance check, then lead Codex review.
+- Legacy `/all` also runs Codex subagent phases instead of recording no-op Codex placeholders.
+- Codex subagent output must include evidence IDs just like Hermes and Antigravity.
+
 ## Version 0.4.0 Local Routing
 
 - Added `triagent check` for a no-run preview of config validity, route choice, and risk level.
@@ -129,49 +144,14 @@ Example schema v1 config:
 - `public/dashboard.css` owns the current dashboard visual system; `public/index.html` no longer links the older `public/styles.css` theme.
 - Added a small local queue helper that returns runnable tasks by priority and only retries plain failed process attempts below `max_attempts`.
 
-## Version 0.2.0 Safety and Review Flow
+## Version 0.3.4 Dashboard UX Foundation
 
-- `triagent run` now auto-stuffs task packets with cwd, edit scope, deletion rules, output format, and evidence ID rules.
-- Subagent factual claims must cite evidence IDs such as `[E1]`; missing IDs are left visible for Codex review.
-- Dangerous recursive deletion text such as `rm -rf`, `del /s`, `rd /s`, `rmdir /s`, and `Remove-Item -Recurse` is blocked before a subagent is called.
-- High-risk text such as production, config, migration, credential, or delete requires terminal confirmation. In non-interactive runs, re-run with `--yes-risk` only after GuGU confirms.
-- `/all` asks Hermes and Antigravity for compact summaries under 500 Chinese characters before cross-checking, so cross-check phases do not rely on full raw logs.
-- `triagent note <task-id> -- <markdown>` writes Codex's final decision back into the observer.
-- `triagent report <task-id> [--out report.md]` exports the task packet, raw events, exit code, evidence IDs, and Codex note as Markdown.
-
-## Version 0.3.0 Interactive and Audit Flow
-
-- Agent output containing `[NEED_CLARIFY]: <question>` marks a task as `needs_clarification`.
-- `triagent reply <task-id> -- <answer>` resumes work with the original packet, recent history, and GuGU/Codex's clarification. Each task gets at most three clarification replies.
-- `triagent audit <task-id> --agent so|ant|hermes` launches a shadow audit from the structured report, not the full raw log.
-- `triagent run --dry-run <agent> -- <goal>` runs a task inside a Git sandbox worktree and records the sandbox path in task metadata.
-- `triagent apply <sandbox-task-id> --yes-risk` applies a successful sandbox diff only when the real worktree is clean and the diff passes safety checks.
-- `triagent sync-memory --dry-run` compares Codex, Hermes, and Antigravity memory files without writing them.
-- `triagent dashboard --enable-actions` reveals the sandbox Apply command button; the default dashboard remains read-only.
-- Version history is maintained in `CHANGELOG.md`.
-
-## Version 0.5.0 Codex Subagent
-
-- Added `/so <task>` and `triagent run so -- "<task>"` for launching a Codex CLI subagent while keeping `/co` as the lead Codex personal route.
-- Added `agents.codex_subagent` config and `/so` routing defaults.
-- Default `/all` now includes Hermes pre-filter, Codex subagent engineering review, Antigravity alternative, Hermes joint proposal, Codex subagent compliance check, then lead Codex review.
-- Legacy `/all` also runs Codex subagent phases instead of recording no-op Codex placeholders.
-- Codex subagent output must include evidence IDs just like Hermes and Antigravity.
-
-## Version 0.5.1 Codex CLI Compatibility
-
-- Codex subagent commands no longer pass the deprecated `--ask-for-approval never` argument, matching `codex-cli 0.137.0`.
-- `/all` phase subprocesses no longer mark the parent task complete before the full multi-agent flow finishes.
-- Clarification detection now reads the final agent stdout only, so `[NEED_CLARIFY]` examples in stderr logs or tool output do not falsely mark tasks as `needs_clarification`.
-- Codex subagent child processes default to `RUST_LOG=off` to suppress noisy plugin and skill loader WARN lines. Use `TRIAGENT_CODEX_RUST_LOG` when debugging Codex CLI internals.
-
-## Version 0.3.1 Stability Fixes
-
-- `triagent gc` previews sandbox worktrees that are safe to clean.
-- `triagent gc --apply` removes eligible Git sandbox worktrees through `git worktree remove <path>`, not shell recursive deletion.
-- Applied sandboxes are eligible for cleanup. Old clean sandboxes become eligible after 7 days.
-- Successful Hermes or Antigravity output without evidence IDs now marks the task as `needs_evidence` for Codex review.
-- SQLite writes retry transient `SQLITE_BUSY` / `SQLITE_LOCKED` errors and split long stdout/stderr chunks before storing.
+- The dashboard keeps the same read-only APIs and CLI behavior.
+- `public/index.html` defines the observer shell, task stream, task packet pane, and raw output pane.
+- `public/app.js` keeps the WebSocket/auto-refresh data flow, shows the latest 8 tasks by default, keeps the selected older task visible, and lets GuGU toggle all tasks.
+- `public/app.js` also groups consecutive SQLite log chunks with the same `agent` and `stream` into one readable raw-output block.
+- `public/styles.css` was the 0.3.4 visual theme. Version 0.4.0 keeps the data flow and switches the active stylesheet to `public/dashboard.css`.
+- No backend, SQLite, runner, task status, or subagent workflow behavior changed in 0.3.4.
 
 ## Version 0.3.2 Token Save Mode
 
@@ -192,14 +172,34 @@ Optional config:
 }
 ```
 
-## Version 0.3.4 Dashboard UX Foundation
+## Version 0.3.1 Stability Fixes
 
-- The dashboard keeps the same read-only APIs and CLI behavior.
-- `public/index.html` defines the observer shell, task stream, task packet pane, and raw output pane.
-- `public/app.js` keeps the WebSocket/auto-refresh data flow, shows the latest 8 tasks by default, keeps the selected older task visible, and lets GuGU toggle all tasks.
-- `public/app.js` also groups consecutive SQLite log chunks with the same `agent` and `stream` into one readable raw-output block.
-- `public/styles.css` was the 0.3.4 visual theme. Version 0.4.0 keeps the data flow and switches the active stylesheet to `public/dashboard.css`.
-- No backend, SQLite, runner, task status, or subagent workflow behavior changed in 0.3.4.
+- `triagent gc` previews sandbox worktrees that are safe to clean.
+- `triagent gc --apply` removes eligible Git sandbox worktrees through `git worktree remove <path>`, not shell recursive deletion.
+- Applied sandboxes are eligible for cleanup. Old clean sandboxes become eligible after 7 days.
+- Successful Hermes or Antigravity output without evidence IDs now marks the task as `needs_evidence` for Codex review.
+- SQLite writes retry transient `SQLITE_BUSY` / `SQLITE_LOCKED` errors and split long stdout/stderr chunks before storing.
+
+## Version 0.3.0 Interactive and Audit Flow
+
+- Agent output containing `[NEED_CLARIFY]: <question>` marks a task as `needs_clarification`.
+- `triagent reply <task-id> -- <answer>` resumes work with the original packet, recent history, and GuGU/Codex's clarification. Each task gets at most three clarification replies.
+- `triagent audit <task-id> --agent so|ant|hermes` launches a shadow audit from the structured report, not the full raw log.
+- `triagent run --dry-run <agent> -- <goal>` runs a task inside a Git sandbox worktree and records the sandbox path in task metadata.
+- `triagent apply <sandbox-task-id> --yes-risk` applies a successful sandbox diff only when the real worktree is clean and the diff passes safety checks.
+- `triagent sync-memory --dry-run` compares Codex, Hermes, and Antigravity memory files without writing them.
+- `triagent dashboard --enable-actions` reveals the sandbox Apply command button; the default dashboard remains read-only.
+- Version history is maintained in `CHANGELOG.md`.
+
+## Version 0.2.0 Safety and Review Flow
+
+- `triagent run` now auto-stuffs task packets with cwd, edit scope, deletion rules, output format, and evidence ID rules.
+- Subagent factual claims must cite evidence IDs such as `[E1]`; missing IDs are left visible for Codex review.
+- Dangerous recursive deletion text such as `rm -rf`, `del /s`, `rd /s`, `rmdir /s`, and `Remove-Item -Recurse` is blocked before a subagent is called.
+- High-risk text such as production, config, migration, credential, or delete requires terminal confirmation. In non-interactive runs, re-run with `--yes-risk` only after GuGU confirms.
+- `/all` asks Hermes and Antigravity for compact summaries under 500 Chinese characters before cross-checking, so cross-check phases do not rely on full raw logs.
+- `triagent note <task-id> -- <markdown>` writes Codex's final decision back into the observer.
+- `triagent report <task-id> [--out report.md]` exports the task packet, raw events, exit code, evidence IDs, and Codex note as Markdown.
 
 ## Memory Files
 
