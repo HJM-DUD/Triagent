@@ -17,8 +17,29 @@ export function resolveAntigravityCommand(hasCommand = defaultHasCommand) {
   return "agy";
 }
 
-export function buildAgentCommand({ agent, taskPacket, edit = false, antCommand, hermesCommand }) {
-  if (agent === "hermes") {
+export function normalizeAgentName(agent) {
+  if (agent === "antigravity") {
+    return "ant";
+  }
+  if (agent === "so" || agent === "codex-subagent") {
+    return "codex_subagent";
+  }
+  return agent;
+}
+
+export function buildAgentCommand({
+  agent,
+  taskPacket,
+  cwd = process.cwd(),
+  edit = false,
+  antCommand,
+  hermesCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval = "never"
+}) {
+  const normalizedAgent = normalizeAgentName(agent);
+  if (normalizedAgent === "hermes") {
     if (edit) {
       return {
         cmd: hermesCommand || "hermes",
@@ -44,10 +65,28 @@ export function buildAgentCommand({ agent, taskPacket, edit = false, antCommand,
     };
   }
 
-  if (agent === "ant") {
+  if (normalizedAgent === "ant") {
     return {
       cmd: antCommand || resolveAntigravityCommand(),
       args: ["--print", taskPacket]
+    };
+  }
+
+  if (normalizedAgent === "codex_subagent") {
+    return {
+      cmd: codexCommand || "codex",
+      args: [
+        "exec",
+        "--cd",
+        cwd,
+        "--sandbox",
+        codexSandbox || (edit ? "workspace-write" : "read-only"),
+        "--ask-for-approval",
+        codexApproval,
+        "--color",
+        "never",
+        taskPacket
+      ]
     };
   }
 
@@ -76,8 +115,8 @@ export function buildAllDiscussionPlan(goal, cwd = process.cwd()) {
   ].join("\n");
   return [
     {
-      agent: "codex",
-      title: "Problem definition",
+      agent: "codex_subagent",
+      title: "Codex subagent problem definition",
       taskPacket: `Problem definition\n${base}\nDefine success criteria, constraints, known facts, and risks.`
     },
     {
@@ -91,8 +130,8 @@ export function buildAllDiscussionPlan(goal, cwd = process.cwd()) {
       taskPacket: `${base}\nAnalyze alternatives, long-context concerns, UI/product implications, and Google ecosystem fit. Do not edit files.\nFinish with a summary under 500 Chinese characters: core proposal points and potential risks.`
     },
     {
-      agent: "codex",
-      title: "Codex draft decision",
+      agent: "codex_subagent",
+      title: "Codex subagent draft decision",
       taskPacket: `${base}\nDraft the lead architecture decision and identify what each subagent should challenge.`
     },
     {
@@ -106,9 +145,9 @@ export function buildAllDiscussionPlan(goal, cwd = process.cwd()) {
       taskPacket: `${base}\nCross-check only the compact summary and evidence IDs from Codex and Hermes, not their full Raw Log. Look for product, UX, scale, and long-context issues.`
     },
     {
-      agent: "codex",
-      title: "Codex final decision",
-      taskPacket: `${base}\nFinal裁决: summarize agreements, disagreements, accepted points, rejected points, and final plan.`
+      agent: "codex_subagent",
+      title: "Codex subagent final synthesis",
+      taskPacket: `${base}\nFinal synthesis: summarize agreements, disagreements, accepted points, rejected points, and final plan for Codex lead review.`
     }
   ];
 }

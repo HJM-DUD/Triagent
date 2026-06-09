@@ -5,6 +5,7 @@ Triagent is GuGU's local observer and wrapper for the Codex + Hermes + Antigravi
 ## Roles
 
 - Codex is the lead agent in Codex App.
+- Codex subagent is the local Codex CLI worker, invoked by Triagent through `codex exec`.
 - Hermes is the local DeepSeek subagent.
 - Antigravity CLI is the Gemini subagent. The confirmed CLI command is `agy`.
 - The dashboard is read-only. It records task packets, raw CLI output, status, exit codes, and `/all` discussion phases. It does not call any model.
@@ -25,6 +26,7 @@ triagent config validate
 triagent config get defaults.priority
 triagent config set defaults.priority 70
 triagent run auto -- "/her inspect this project"
+triagent run so -- "Goal: inspect this project with Codex subagent"
 triagent run hermes -- "Goal: inspect this project"
 triagent run ant -- "Goal: review this design"
 triagent run all -- "Design a safe migration plan"
@@ -33,7 +35,7 @@ triagent run all --no-token-save -- "Disable token-save for this run"
 triagent run --dry-run hermes -- "Refactor safely in a sandbox"
 triagent reply <task-id> -- "Use the local dependency only."
 triagent reply --full-context <task-id> -- "Use the old full-context reply packet."
-triagent audit <task-id> --agent ant
+triagent audit <task-id> --agent so
 triagent apply <sandbox-task-id> --yes-risk
 triagent gc
 triagent gc --apply
@@ -48,6 +50,12 @@ Antigravity is invoked by Triagent through:
 agy --print "<task packet>"
 ```
 
+Codex subagent is invoked by Triagent through:
+
+```bash
+codex exec --cd "<cwd>" --sandbox read-only --ask-for-approval never --color never "<task packet>"
+```
+
 Inside the interactive Antigravity CLI, use `/model` to switch models and `/usage` to inspect available models, quota, rate limits, and remaining free/paid package percentage before choosing a model.
 
 Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (Low/High), Claude Sonnet 4.6 (Thinking), Claude Opus 4.6 (Thinking), and GPT-OSS 120B (Medium).
@@ -55,11 +63,12 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 ## Routing Prefixes
 
 - `/co <task>`: Codex does the task personally.
+- `/so <task>`: Codex delegates to the Codex subagent through `triagent run so`.
 - `/her <task>`: Codex delegates to Hermes through `triagent run hermes`.
 - `/ant <task>`: Codex delegates to Antigravity through `triagent run ant`.
-- `/all <task>`: Codex starts the three-agent discussion and cross-check workflow.
+- `/all <task>`: Codex starts the Codex subagent + Hermes + Antigravity discussion and cross-check workflow.
 - `triagent run auto -- "<task>"`: Triagent applies the same local route rules before launching a subagent or recording a Codex-review task.
-- No prefix: Triagent uses local rules first. Hermes is preferred for code/log/test inspection, Antigravity for UI/product/alternative analysis, `/all` for architecture, migration, production, credential, deletion, or other high-risk work. Otherwise Codex keeps the task.
+- No prefix: Triagent uses local rules first. Hermes is preferred for code/log/test inspection, Antigravity for UI/product/alternative analysis, `/all` for architecture, migration, production, credential, deletion, or other high-risk work. Otherwise Codex keeps the task. Use `/so` when GuGU explicitly wants a separate Codex worker instead of the lead Codex thread.
 - High-risk work still needs GuGU confirmation or `--yes-risk` in non-interactive runs.
 
 ## Data
@@ -71,9 +80,9 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - The dashboard auto-refreshes while open. New tasks and new output pulse briefly so GuGU can see fresh dialogue without manual refresh.
 - The dashboard frontend is static HTML/CSS/JS in `public/`. Version 0.4.0 uses a restrained local workspace visual style, bounded task stream, all-task toggle, date/time task stamps, route/risk/retry summary metrics, grouped raw-output reading blocks, and reduced-motion support.
 - SQLite uses WAL mode, a longer busy timeout, write retries, and log chunking to reduce dashboard crashes while `/all` is writing logs.
-- `triagent.config.json` supports the legacy `token_save_mode`, `prefilter_max_chars`, and `compliance_mode` keys, plus the 0.4.0 schema with defaults, agent commands, routing prefixes/rules, and safety switches.
+- `triagent.config.json` supports the legacy `token_save_mode`, `prefilter_max_chars`, and `compliance_mode` keys, plus the 0.5.0 schema with defaults, agent commands, routing prefixes/rules, and safety switches.
 
-Example 0.4.0 config:
+Example 0.5.0 config:
 
 ```json
 {
@@ -88,11 +97,18 @@ Example 0.4.0 config:
     "compliance_mode": "block"
   },
   "agents": {
+    "codex_subagent": {
+      "enabled": true,
+      "command": "codex",
+      "sandbox": "read-only",
+      "dryRunSandbox": "workspace-write",
+      "approval": "never"
+    },
     "hermes": { "enabled": true, "command": "hermes", "model": "deepseek-v4-pro" },
     "ant": { "enabled": true, "command": "agy" }
   },
   "routing": {
-    "prefixes": { "/her": "hermes", "/ant": "ant", "/all": "all", "/co": "codex" },
+    "prefixes": { "/her": "hermes", "/ant": "ant", "/all": "all", "/so": "codex_subagent", "/co": "codex" },
     "rules": []
   },
   "safety": {
@@ -126,12 +142,20 @@ Example 0.4.0 config:
 
 - Agent output containing `[NEED_CLARIFY]: <question>` marks a task as `needs_clarification`.
 - `triagent reply <task-id> -- <answer>` resumes work with the original packet, recent history, and GuGU/Codex's clarification. Each task gets at most three clarification replies.
-- `triagent audit <task-id> --agent ant|hermes` launches a shadow audit from the structured report, not the full raw log.
+- `triagent audit <task-id> --agent so|ant|hermes` launches a shadow audit from the structured report, not the full raw log.
 - `triagent run --dry-run <agent> -- <goal>` runs a task inside a Git sandbox worktree and records the sandbox path in task metadata.
 - `triagent apply <sandbox-task-id> --yes-risk` applies a successful sandbox diff only when the real worktree is clean and the diff passes safety checks.
 - `triagent sync-memory --dry-run` compares Codex, Hermes, and Antigravity memory files without writing them.
 - `triagent dashboard --enable-actions` reveals the sandbox Apply command button; the default dashboard remains read-only.
 - Version history is maintained in `CHANGELOG.md`.
+
+## Version 0.5.0 Codex Subagent
+
+- Added `/so <task>` and `triagent run so -- "<task>"` for launching a Codex CLI subagent while keeping `/co` as the lead Codex personal route.
+- Added `agents.codex_subagent` config and `/so` routing defaults.
+- Default `/all` now includes Hermes pre-filter, Codex subagent engineering review, Antigravity alternative, Hermes joint proposal, Codex subagent compliance check, then lead Codex review.
+- Legacy `/all` also runs Codex subagent phases instead of recording no-op Codex placeholders.
+- Codex subagent output must include evidence IDs just like Hermes and Antigravity.
 
 ## Version 0.3.1 Stability Fixes
 
@@ -144,7 +168,7 @@ Example 0.4.0 config:
 ## Version 0.3.2 Token Save Mode
 
 - `token_save_mode` is on by default for `/all`.
-- Default `/all` now runs: Hermes pre-filter, Antigravity alternative, Hermes joint proposal, Hermes compliance check, then Codex review.
+- Default `/all` now runs: Hermes pre-filter, Codex subagent engineering review, Antigravity alternative, Hermes joint proposal, Codex subagent compliance check, then Codex review.
 - Use `triagent run all --legacy -- "<goal>"` to keep the 0.3.1 seven-phase discussion.
 - Hermes pre-filter summaries are saved in `task_meta.prefilter_summary`; joint proposals are saved in `task_meta.joint_proposal`.
 - Compliance failures mark tasks as `needs_compliance` instead of sending noisy low-quality results to Codex.

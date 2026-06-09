@@ -37,6 +37,31 @@ test("builds Antigravity command using detected command name", () => {
   assert.deepEqual(command.args, ["--print", "Goal: review design"]);
 });
 
+test("builds Codex subagent command with cwd, sandbox, and non-interactive approval", () => {
+  const command = buildAgentCommand({
+    agent: "codex_subagent",
+    taskPacket: "Goal: inspect project",
+    cwd: "/tmp/project",
+    codexCommand: "codex",
+    codexSandbox: "read-only",
+    codexApproval: "never"
+  });
+
+  assert.equal(command.cmd, "codex");
+  assert.deepEqual(command.args, [
+    "exec",
+    "--cd",
+    "/tmp/project",
+    "--sandbox",
+    "read-only",
+    "--ask-for-approval",
+    "never",
+    "--color",
+    "never",
+    "Goal: inspect project"
+  ]);
+});
+
 test("prefers agy over antigravity when both command names are available", () => {
   const found = resolveAntigravityCommand((name) => name === "agy" || name === "antigravity");
   assert.equal(found, "agy");
@@ -46,16 +71,16 @@ test("/all discussion plan has deterministic phases", () => {
   const phases = buildAllDiscussionPlan("Design a safe migration");
 
   assert.deepEqual(phases.map((phase) => phase.agent), [
-    "codex",
+    "codex_subagent",
     "hermes",
     "ant",
-    "codex",
+    "codex_subagent",
     "hermes",
     "ant",
-    "codex"
+    "codex_subagent"
   ]);
   assert.match(phases[0].taskPacket, /Problem definition/);
-  assert.match(phases.at(-1).taskPacket, /Final裁决/);
+  assert.match(phases.at(-1).taskPacket, /Final synthesis/);
   assert.match(phases[1].taskPacket, /500/);
   assert.match(phases[4].taskPacket, /summary/i);
   assert.doesNotMatch(phases[4].taskPacket, /完整.*Raw Log/);

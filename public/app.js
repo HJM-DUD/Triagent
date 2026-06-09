@@ -105,7 +105,7 @@ function renderTasks() {
     button.addEventListener("click", () => selectTask(task.id));
     button.innerHTML = `
       <span class="task-head">
-        <span class="task-agent">${escapeHtml(task.agent)}</span>
+        <span class="task-agent">${escapeHtml(agentLabel(task.agent))}</span>
         <span class="task-time">${escapeHtml(formatTime(task.createdAt))}</span>
       </span>
       <span class="task-title">${escapeHtml(task.title)}</span>
@@ -196,7 +196,7 @@ function buildEventMarkup(events) {
       return `
         <article class="event-entry">
           <header class="event-header">
-            <span class="event-agent">${escapeHtml(group.agent)}</span>
+            <span class="event-agent">${escapeHtml(agentLabel(group.agent))}</span>
             <span class="event-stream-name ${streamClass}">${escapeHtml(group.stream)}</span>
             <span class="event-chunks">${escapeHtml(chunkText)}</span>
             <time>${escapeHtml(formatDateTime(group.startedAt))}</time>
@@ -282,11 +282,22 @@ function formatStatus(status) {
 }
 
 function selectedMeta(task) {
-  return `${task.agent} / ${task.mode} / ${task.cwd || "-"}`;
+  return `${agentLabel(task.agent)} / ${task.mode} / ${task.cwd || "-"}`;
 }
 
 function routeLabel(task) {
-  return task.routeAgent || task.agent;
+  return agentLabel(task.routeAgent || task.agent);
+}
+
+function agentLabel(agent) {
+  const labels = {
+    codex_subagent: "Codex subagent",
+    codex: "Codex",
+    hermes: "Hermes",
+    ant: "Antigravity",
+    all: "All"
+  };
+  return labels[agent] || agent || "-";
 }
 
 function riskLabel(task) {

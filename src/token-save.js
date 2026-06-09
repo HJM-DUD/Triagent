@@ -25,11 +25,23 @@ export function buildAlternativePacket({ goal, prefilterSummary }) {
   ].join("\n");
 }
 
-export function buildJointProposalPacket({ goal, prefilterSummary, alternativeSummary }) {
+export function buildCodexEngineeringPacket({ goal, prefilterSummary }) {
+  return [
+    "Token-save Codex Subagent Engineering Review",
+    `Goal: ${goal}`,
+    "Use only the structured pre-filter summary below. Do not request or restate Raw Log.",
+    "Give a compact implementation/architecture/safety review with evidence IDs.",
+    "",
+    "Structured pre-filter summary:",
+    truncateSummary(prefilterSummary, 1600)
+  ].join("\n");
+}
+
+export function buildJointProposalPacket({ goal, prefilterSummary, codexSummary = "", alternativeSummary }) {
   return [
     "Token-save Joint Proposal",
     `Goal: ${goal}`,
-    "Hermes is the drafter. Use the pre-filter summary and Antigravity alternative only.",
+    "Hermes is the drafter. Use the pre-filter summary, Codex subagent engineering review, and Antigravity alternative only.",
     "Return extremely compact Markdown with exactly these sections:",
     "## 方案 A",
     "## 方案 B",
@@ -39,6 +51,9 @@ export function buildJointProposalPacket({ goal, prefilterSummary, alternativeSu
     "",
     "Pre-filter summary:",
     truncateSummary(prefilterSummary, 1600),
+    "",
+    "Codex subagent engineering review:",
+    truncateSummary(codexSummary, 1200),
     "",
     "Antigravity alternative:",
     truncateSummary(alternativeSummary, 1200)

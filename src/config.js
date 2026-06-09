@@ -16,11 +16,18 @@ const DEFAULT_CONFIG = {
     complianceMode: "block"
   },
   agents: {
+    codex_subagent: {
+      enabled: true,
+      command: "codex",
+      sandbox: "read-only",
+      dryRunSandbox: "workspace-write",
+      approval: "never"
+    },
     hermes: { enabled: true, command: "hermes", model: "deepseek-v4-pro" },
     ant: { enabled: true, command: "agy" }
   },
   routing: {
-    prefixes: { "/her": "hermes", "/ant": "ant", "/all": "all", "/co": "codex" },
+    prefixes: { "/her": "hermes", "/ant": "ant", "/all": "all", "/so": "codex_subagent", "/co": "codex" },
     rules: []
   },
   safety: {
