@@ -23,6 +23,20 @@ test("check command prints json route and risk preview without running agents", 
   assert.equal(parsed.task, "inspect logs");
 });
 
+test("check command routes /so to the Codex subagent", async () => {
+  const { stdout } = await execFileAsync(process.execPath, [
+    "./bin/triagent.js",
+    "check",
+    "--json",
+    "--task",
+    "/so inspect with Codex subagent"
+  ]);
+
+  const parsed = JSON.parse(stdout);
+  assert.equal(parsed.route.agent, "codex_subagent");
+  assert.equal(parsed.task, "inspect with Codex subagent");
+});
+
 test("config show prints normalized json config", async () => {
   const dir = await mkdtemp(join(tmpdir(), "triagent-cli-"));
   try {

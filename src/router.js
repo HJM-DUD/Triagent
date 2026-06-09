@@ -2,6 +2,7 @@ const DEFAULT_PREFIXES = {
   "/her": "hermes",
   "/ant": "ant",
   "/all": "all",
+  "/so": "codex_subagent",
   "/co": "codex"
 };
 

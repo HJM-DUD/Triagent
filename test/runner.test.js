@@ -82,6 +82,37 @@ test("marks successful subagent output without evidence IDs as needs_evidence", 
   }
 });
 
+test("runs Codex subagent through the tracked process path", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "triagent-runner-"));
+  const dbPath = join(dir, "triagent.sqlite");
+  try {
+    const store = new TriagentStore(dbPath);
+    const fakeAgent = join(dir, "fake-codex.sh");
+    await writeFile(fakeAgent, "#!/bin/sh\necho '[E1] Codex subagent checked the task'\n", "utf8");
+    await chmod(fakeAgent, 0o755);
+
+    const result = await runSingleAgent({
+      agent: "codex_subagent",
+      goal: "inspect with Codex subagent",
+      store,
+      codexCommand: fakeAgent
+    });
+
+    const verifyStore = new TriagentStore(dbPath);
+    const task = verifyStore.getTask(result.taskId);
+    const events = verifyStore.listEvents(result.taskId);
+
+    assert.equal(result.status, "succeeded");
+    assert.equal(task.agent, "codex_subagent");
+    assert.equal(events.some((event) => event.content.includes("exec --cd")), true);
+    verifyStore.close();
+  } finally {
+    await unlink(dbPath).catch(() => {});
+    await unlink(join(dir, "fake-codex.sh")).catch(() => {});
+    await rmdir(dir).catch(() => {});
+  }
+});
+
 test("token-save /all stores compact summaries and waits for Codex review", async () => {
   const dir = await mkdtemp(join(tmpdir(), "triagent-runner-"));
   const dbPath = join(dir, "triagent.sqlite");
@@ -109,6 +140,7 @@ test("token-save /all stores compact summaries and waits for Codex review", asyn
       store,
       hermesCommand: fakeAgent,
       antCommand: fakeAgent,
+      codexCommand: fakeAgent,
       tokenSaveMode: true
     });
 
@@ -121,7 +153,7 @@ test("token-save /all stores compact summaries and waits for Codex review", asyn
     assert.equal(verifyStore.getTaskMeta(result.taskId, "token_save_mode"), "true");
     assert.match(verifyStore.getTaskMeta(result.taskId, "prefilter_summary"), /Pre-filter summary/);
     assert.match(verifyStore.getTaskMeta(result.taskId, "joint_proposal"), /方案 A/);
-    assert.equal(events.filter((event) => event.stream === "phase").length, 4);
+    assert.equal(events.filter((event) => event.stream === "phase").length, 5);
     verifyStore.close();
   } finally {
     await unlink(dbPath).catch(() => {});
@@ -157,6 +189,7 @@ test("token-save /all blocks on compliance failure", async () => {
       store,
       hermesCommand: fakeAgent,
       antCommand: fakeAgent,
+      codexCommand: fakeAgent,
       tokenSaveMode: true
     });
 
@@ -199,6 +232,7 @@ test("token-save /all can warn instead of blocking compliance failure", async ()
       store,
       hermesCommand: fakeAgent,
       antCommand: fakeAgent,
+      codexCommand: fakeAgent,
       tokenSaveMode: true,
       complianceMode: "warn"
     });
@@ -229,6 +263,7 @@ test("legacy /all keeps the old seven-phase flow", async () => {
       store,
       hermesCommand: fakeAgent,
       antCommand: fakeAgent,
+      codexCommand: fakeAgent,
       tokenSaveMode: false
     });
 

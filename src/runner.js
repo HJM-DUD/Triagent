@@ -8,7 +8,13 @@ import {
   parseClarificationRequest,
   shouldBlockClarification
 } from "./clarify.js";
-import { buildAgentCommand, buildAllDiscussionPlan, buildTaskPacket, resolveAntigravityCommand } from "./commands.js";
+import {
+  buildAgentCommand,
+  buildAllDiscussionPlan,
+  buildTaskPacket,
+  normalizeAgentName,
+  resolveAntigravityCommand
+} from "./commands.js";
 import { defaultDbPath } from "./paths.js";
 import { evaluateEvidenceStatus } from "./evidence.js";
 import { buildMarkdownReport } from "./report.js";
@@ -17,6 +23,7 @@ import { assertSafeTaskPacket } from "./safety.js";
 import { TriagentStore } from "./store.js";
 import {
   buildAlternativePacket,
+  buildCodexEngineeringPacket,
   buildCompliancePacket,
   buildJointProposalPacket,
   buildPrefilterPacket,
@@ -45,6 +52,9 @@ export async function runSingleAgent({
   title,
   store = openStore(),
   antCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval,
   mode = "single",
   parentTaskId,
   meta = {},
@@ -56,15 +66,19 @@ export async function runSingleAgent({
   routeReason = "",
   riskLevel = "low"
 }) {
-  const normalizedAgent = agent === "antigravity" ? "ant" : agent;
+  const normalizedAgent = normalizeAgentName(agent);
   const packet = taskPacket || buildTaskPacket({ goal, cwd, edit });
   assertSafeTaskPacket(packet);
   const command = buildAgentCommand({
     agent: normalizedAgent,
     taskPacket: packet,
+    cwd,
     edit,
     hermesCommand,
-    antCommand: antCommand || (normalizedAgent === "ant" ? resolveAntigravityCommand() : undefined)
+    antCommand: antCommand || (normalizedAgent === "ant" ? resolveAntigravityCommand() : undefined),
+    codexCommand,
+    codexSandbox,
+    codexApproval
   });
   const task = store.createTask({
     mode,
@@ -110,6 +124,9 @@ export async function runAllDiscussion({
   complianceMode = "block",
   hermesCommand,
   antCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval,
   priority = 50,
   maxAttempts = 2,
   routeReason = "",
@@ -126,6 +143,9 @@ export async function runAllDiscussion({
       complianceMode,
       hermesCommand,
       antCommand,
+      codexCommand,
+      codexSandbox,
+      codexApproval,
       priority,
       maxAttempts,
       routeReason,
@@ -166,22 +186,15 @@ export async function runAllDiscussion({
     });
     publish("event", { taskId: task.id });
 
-    if (phase.agent === "codex") {
-      store.appendEvent({
-        taskId: task.id,
-        agent: "codex",
-        stream: "system",
-        content: "Codex phase is recorded for the lead agent to answer in Codex App; no local model call is made by the dashboard."
-      });
-      publish("event", { taskId: task.id });
-      continue;
-    }
-
     const command = buildAgentCommand({
       agent: phase.agent,
       taskPacket: phase.taskPacket,
+      cwd,
       hermesCommand,
-      antCommand: phase.agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined
+      antCommand: phase.agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined,
+      codexCommand,
+      codexSandbox,
+      codexApproval
     });
     store.appendEvent({
       taskId: task.id,
@@ -212,7 +225,17 @@ export async function runAllDiscussion({
   return { taskId: task.id, status };
 }
 
-export async function replyToTask({ taskId, answer, store = openStore(), antCommand, hermesCommand, fullContext = false }) {
+export async function replyToTask({
+  taskId,
+  answer,
+  store = openStore(),
+  antCommand,
+  hermesCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval,
+  fullContext = false
+}) {
   const task = store.getTask(taskId);
   if (!task) {
     throw new Error(`Task not found: ${taskId}`);
@@ -260,20 +283,32 @@ export async function replyToTask({ taskId, answer, store = openStore(), antComm
     store,
     antCommand,
     hermesCommand,
+    codexCommand,
+    codexSandbox,
+    codexApproval,
     mode: "clarification",
     parentTaskId: taskId,
     meta: { clarify_count: String(nextCount) }
   });
 }
 
-export async function runAudit({ taskId, auditor, store = openStore(), antCommand, hermesCommand }) {
+export async function runAudit({
+  taskId,
+  auditor,
+  store = openStore(),
+  antCommand,
+  hermesCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval
+}) {
   const task = store.getTask(taskId);
   if (!task) {
     throw new Error(`Task not found: ${taskId}`);
   }
-  const agent = auditor === "antigravity" ? "ant" : auditor;
-  if (agent !== "ant" && agent !== "hermes") {
-    throw new Error("Audit agent must be ant or hermes.");
+  const agent = normalizeAgentName(auditor);
+  if (agent !== "ant" && agent !== "hermes" && agent !== "codex_subagent") {
+    throw new Error("Audit agent must be ant, hermes, or so.");
   }
   const report = buildMarkdownReport({ store, taskId });
   const packet = buildAuditPacket({ taskId, report, auditor: agent });
@@ -286,6 +321,9 @@ export async function runAudit({ taskId, auditor, store = openStore(), antComman
     store,
     antCommand,
     hermesCommand,
+    codexCommand,
+    codexSandbox,
+    codexApproval,
     mode: "audit",
     parentTaskId: taskId
   });
@@ -298,6 +336,10 @@ export async function runDryRunAgent({
   sandboxCwd,
   store = openStore(),
   antCommand,
+  hermesCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval,
   tokenSaveMode = true,
   prefilterMaxChars = 800,
   complianceMode = "block"
@@ -316,7 +358,12 @@ export async function runDryRunAgent({
       },
       tokenSaveMode,
       prefilterMaxChars,
-      complianceMode
+      complianceMode,
+      hermesCommand,
+      antCommand,
+      codexCommand,
+      codexSandbox: codexSandbox || "workspace-write",
+      codexApproval
     });
   }
   const packet = buildDryRunTaskPacket({ goal, realCwd: cwd, sandboxCwd: resolvedSandboxCwd });
@@ -328,6 +375,11 @@ export async function runDryRunAgent({
     title: `Dry-run: ${firstLine(goal)}`,
     store,
     antCommand,
+    hermesCommand,
+    codexCommand,
+    codexSandbox: codexSandbox || "workspace-write",
+    codexApproval,
+    edit: normalizeAgentName(agent) === "codex_subagent",
     mode: "dry-run",
     meta: {
       real_cwd: cwd,
@@ -414,6 +466,9 @@ async function runTokenSaveDiscussion({
   complianceMode,
   hermesCommand,
   antCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval,
   priority = 50,
   maxAttempts = 2,
   routeReason = "",
@@ -423,7 +478,7 @@ async function runTokenSaveDiscussion({
   const taskPacket = [
     "# Token-save /all",
     `Goal: ${goal}`,
-    "Phases: Hermes pre-filter, Antigravity alternative, Hermes joint proposal, Hermes compliance check.",
+    "Phases: Hermes pre-filter, Codex subagent engineering review, Antigravity alternative, Hermes joint proposal, Codex subagent compliance check.",
     "Codex reads the final compact proposal and writes the final triagent note."
   ].join("\n");
   const task = store.createTask({
@@ -454,13 +509,35 @@ async function runTokenSaveDiscussion({
     title: "Hermes pre-filter",
     taskPacket: prefilterPacket,
     hermesCommand,
-    antCommand
+    antCommand,
+    codexCommand,
+    codexSandbox,
+    codexApproval
   });
   if (shouldStopPhase({ result: prefilter, task, store })) {
     return finishStoppedPhase({ result: prefilter, task, store });
   }
   const prefilterSummary = truncateSummary(prefilter.output, prefilterMaxChars);
   store.setTaskMeta(task.id, "prefilter_summary", prefilterSummary);
+
+  const codexPacket = buildCodexEngineeringPacket({ goal, prefilterSummary });
+  const codexReview = await runTaskPhase({
+    task,
+    store,
+    cwd,
+    agent: "codex_subagent",
+    title: "Codex subagent engineering review",
+    taskPacket: codexPacket,
+    hermesCommand,
+    antCommand,
+    codexCommand,
+    codexSandbox,
+    codexApproval
+  });
+  if (shouldStopPhase({ result: codexReview, task, store })) {
+    return finishStoppedPhase({ result: codexReview, task, store });
+  }
+  store.setTaskMeta(task.id, "codex_subagent_review", truncateSummary(codexReview.output, 1600));
 
   const alternativePacket = buildAlternativePacket({ goal, prefilterSummary });
   const alternative = await runTaskPhase({
@@ -471,7 +548,10 @@ async function runTokenSaveDiscussion({
     title: "Antigravity alternative",
     taskPacket: alternativePacket,
     hermesCommand,
-    antCommand
+    antCommand,
+    codexCommand,
+    codexSandbox,
+    codexApproval
   });
   if (shouldStopPhase({ result: alternative, task, store })) {
     return finishStoppedPhase({ result: alternative, task, store });
@@ -480,6 +560,7 @@ async function runTokenSaveDiscussion({
   const proposalPacket = buildJointProposalPacket({
     goal,
     prefilterSummary,
+    codexSummary: codexReview.output,
     alternativeSummary: alternative.output
   });
   const proposal = await runTaskPhase({
@@ -490,7 +571,10 @@ async function runTokenSaveDiscussion({
     title: "Hermes joint proposal",
     taskPacket: proposalPacket,
     hermesCommand,
-    antCommand
+    antCommand,
+    codexCommand,
+    codexSandbox,
+    codexApproval
   });
   if (shouldStopPhase({ result: proposal, task, store })) {
     return finishStoppedPhase({ result: proposal, task, store });
@@ -502,11 +586,14 @@ async function runTokenSaveDiscussion({
     task,
     store,
     cwd,
-    agent: "hermes",
-    title: "Hermes compliance check",
+    agent: "codex_subagent",
+    title: "Codex subagent compliance check",
     taskPacket: compliancePacket,
     hermesCommand,
-    antCommand
+    antCommand,
+    codexCommand,
+    codexSandbox,
+    codexApproval
   });
   if (shouldStopPhase({ result: compliance, task, store })) {
     return finishStoppedPhase({ result: compliance, task, store });
@@ -526,7 +613,19 @@ async function runTokenSaveDiscussion({
   return { taskId: task.id, status: "needs_codex_review" };
 }
 
-async function runTaskPhase({ task, store, cwd, agent, title, taskPacket, hermesCommand, antCommand }) {
+async function runTaskPhase({
+  task,
+  store,
+  cwd,
+  agent,
+  title,
+  taskPacket,
+  hermesCommand,
+  antCommand,
+  codexCommand,
+  codexSandbox,
+  codexApproval
+}) {
   assertSafeTaskPacket(taskPacket);
   store.appendEvent({
     taskId: task.id,
@@ -539,8 +638,12 @@ async function runTaskPhase({ task, store, cwd, agent, title, taskPacket, hermes
   const command = buildAgentCommand({
     agent,
     taskPacket,
+    cwd,
     hermesCommand,
-    antCommand: agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined
+    antCommand: agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined,
+    codexCommand,
+    codexSandbox,
+    codexApproval
   });
   store.appendEvent({
     taskId: task.id,

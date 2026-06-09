@@ -2,6 +2,27 @@
 
 All notable Triagent version changes are recorded here. Before any future release or Git tag, update this file first.
 
+## 0.5.0 - 2026-06-09
+
+### Added
+- Added `/so <task>` and `triagent run so -- "<task>"` for launching a Codex CLI subagent through Triagent.
+- Added `agents.codex_subagent` config defaults with read-only normal runs and workspace-write dry-run sandbox runs.
+- Added Codex subagent phases to the default token-save `/all` workflow and the legacy `/all` discussion plan.
+- Added Codex subagent support for shadow audits through `triagent audit <task-id> --agent so`.
+
+### Changed
+- Version upgraded to `0.5.0`.
+- `/co` remains the lead Codex personal route and still records a Codex-review task instead of launching a subagent.
+- Default `/all` now runs Hermes pre-filter, Codex subagent engineering review, Antigravity alternative, Hermes joint proposal, Codex subagent compliance check, then lead Codex review.
+- Dashboard labels now display `codex_subagent` as `Codex subagent`.
+
+### Safety
+- Codex subagent output now uses the same evidence-ID gate as Hermes and Antigravity.
+- Dry-run Codex subagent work runs inside the existing Git sandbox worktree flow.
+
+### Tests
+- Added router, command, config, evidence, runner, CLI, and dashboard assertions for `/so` and Codex subagent behavior.
+
 ## 0.4.0 - 2026-05-31
 
 ### Added

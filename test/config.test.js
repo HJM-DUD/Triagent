@@ -12,6 +12,8 @@ test("loads token-save defaults when no config file exists", () => {
   assert.equal(config.tokenSaveMode, true);
   assert.equal(config.prefilterMaxChars, 800);
   assert.equal(config.complianceMode, "block");
+  assert.equal(config.agents.codex_subagent.command, "codex");
+  assert.equal(config.routing.prefixes["/so"], "codex_subagent");
 });
 
 test("loads triagent config and lets cli options override it", async () => {
@@ -54,11 +56,18 @@ test("loads schema v1 config with agents, routing, safety, and legacy defaults",
           retry_backoff_ms: [1000, 5000]
         },
         agents: {
+          codex_subagent: {
+            enabled: true,
+            command: "codex",
+            sandbox: "read-only",
+            dryRunSandbox: "workspace-write",
+            approval: "never"
+          },
           hermes: { enabled: true, command: "hermes", model: "deepseek-v4-pro" },
           ant: { enabled: false, command: "agy" }
         },
         routing: {
-          prefixes: { "/her": "hermes", "/ant": "ant", "/all": "all", "/co": "codex" },
+          prefixes: { "/her": "hermes", "/ant": "ant", "/all": "all", "/so": "codex_subagent", "/co": "codex" },
           rules: [{ match: ["ui"], agent: "ant", priority: 80 }]
         },
         safety: { confirm_high_risk: true, block_dangerous_commands: true }
@@ -74,7 +83,9 @@ test("loads schema v1 config with agents, routing, safety, and legacy defaults",
     assert.equal(config.complianceMode, "warn");
     assert.equal(config.defaults.priority, 70);
     assert.equal(config.defaults.maxAttempts, 3);
+    assert.equal(config.agents.codex_subagent.dryRunSandbox, "workspace-write");
     assert.equal(config.agents.ant.enabled, false);
+    assert.equal(config.routing.prefixes["/so"], "codex_subagent");
     assert.equal(config.routing.rules[0].agent, "ant");
     assert.equal(config.safety.confirmHighRisk, true);
   } finally {

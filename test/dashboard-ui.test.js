@@ -19,6 +19,8 @@ test("dashboard renders v0.4 local routing metadata with dedicated chips", async
   assert.match(app, /function attemptLabel/);
   assert.match(app, /routeLabel\(task\)/);
   assert.match(app, /riskLabel\(task\)/);
+  assert.match(app, /function agentLabel/);
+  assert.match(app, /Codex subagent/);
 });
 
 test("dashboard stylesheet avoids neon hero treatment and keeps dense tool layout", async () => {

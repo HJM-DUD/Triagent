@@ -7,11 +7,13 @@ test("routes explicit prefixes before automatic rules", () => {
   assert.deepEqual(routeTask("/her inspect logs").agent, "hermes");
   assert.deepEqual(routeTask("/ant review the product flow").agent, "ant");
   assert.deepEqual(routeTask("/all plan a risky migration").agent, "all");
+  assert.deepEqual(routeTask("/so inspect with Codex subagent").agent, "codex_subagent");
   assert.deepEqual(routeTask("/co I will handle this").agent, "codex");
 });
 
 test("strips route prefixes from task text", () => {
   assert.equal(normalizeTaskText("/her inspect logs").text, "inspect logs");
+  assert.equal(normalizeTaskText("/so inspect logs").text, "inspect logs");
   assert.equal(normalizeTaskText("inspect logs").text, "inspect logs");
 });
 

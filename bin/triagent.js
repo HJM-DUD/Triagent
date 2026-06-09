@@ -61,7 +61,8 @@ Usage:
   triagent note <task-id> -- <markdown note>
   triagent report <task-id> [--out report.md]
   triagent reply [--full-context] <task-id> -- <clarification answer>
-  triagent audit <task-id> --agent ant|hermes
+  triagent audit <task-id> --agent ant|hermes|so
+  triagent run [--dry-run] so -- <task packet>
   triagent run [--dry-run] hermes -- <task packet>
   triagent run [--dry-run] ant -- <task packet>
   triagent run [--dry-run] all [--yes-risk] [--legacy|--token-save|--no-token-save] -- <goal>
@@ -93,15 +94,14 @@ async function run(argv) {
   let taskText = (separator >= 0 ? filteredArgv.slice(separator + 1) : filteredArgv.slice(1)).join(" ").trim();
 
   if (!agent || !taskText) {
-    throw new Error("Usage: triagent run <auto|hermes|ant|all> -- <task packet>");
+    throw new Error("Usage: triagent run <auto|so|hermes|ant|all> -- <task packet>");
   }
 
   await confirmHighRisk({ taskText, yesRisk });
 
   let route;
-  let routeConfig;
+  let routeConfig = loadTriagentConfig({ cwd: process.cwd() });
   if (agent === "auto") {
-    routeConfig = loadTriagentConfig({ cwd: process.cwd() });
     route = routeTask(taskText, routeConfig);
     agent = route.agent;
     taskText = route.task;
@@ -139,7 +139,8 @@ async function run(argv) {
           goal: taskText,
           tokenSaveMode: config.tokenSaveMode,
           prefilterMaxChars: config.prefilterMaxChars,
-          complianceMode: config.complianceMode
+          complianceMode: config.complianceMode,
+          ...agentOptions(config, { dryRun: true })
         })
       : await runAllDiscussion({
           goal: taskText,
@@ -149,14 +150,15 @@ async function run(argv) {
           priority: routeConfig?.defaults.priority,
           maxAttempts: routeConfig?.defaults.maxAttempts,
           routeReason: route?.reason,
-          riskLevel: classifyRisk(taskText).level
+          riskLevel: classifyRisk(taskText).level,
+          ...agentOptions(config)
         });
     console.log(`triagent all task ${result.taskId}: ${result.status}${route ? ` (${route.reason})` : ""}`);
     return;
   }
 
   const result = dryRun
-    ? await runDryRunAgent({ agent, goal: taskText })
+    ? await runDryRunAgent({ agent, goal: taskText, ...agentOptions(routeConfig, { dryRun: true }) })
     : await runSingleAgent({
         agent,
         goal: taskText,
@@ -164,7 +166,8 @@ async function run(argv) {
         maxAttempts: routeConfig?.defaults.maxAttempts,
         routeAgent: route?.agent,
         routeReason: route?.reason,
-        riskLevel: classifyRisk(taskText).level
+        riskLevel: classifyRisk(taskText).level,
+        ...agentOptions(routeConfig)
       });
   console.log(`triagent ${agent} task ${result.taskId}: ${result.status}${route ? ` (${route.reason})` : ""}`);
 }
@@ -298,7 +301,12 @@ async function reply(argv) {
     throw new Error("Usage: triagent reply <task-id> -- <clarification answer>");
   }
 
-  const result = await replyToTask({ taskId, answer, fullContext });
+  const result = await replyToTask({
+    taskId,
+    answer,
+    fullContext,
+    ...agentOptions(loadTriagentConfig({ cwd: process.cwd() }))
+  });
   console.log(`triagent reply task ${result.taskId}: ${result.status}`);
 }
 
@@ -306,10 +314,10 @@ async function audit(argv) {
   const taskId = argv[0];
   const auditor = readFlag(argv, "--agent");
   if (!taskId || !auditor) {
-    throw new Error("Usage: triagent audit <task-id> --agent ant|hermes");
+    throw new Error("Usage: triagent audit <task-id> --agent ant|hermes|so");
   }
 
-  const result = await runAudit({ taskId, auditor });
+  const result = await runAudit({ taskId, auditor, ...agentOptions(loadTriagentConfig({ cwd: process.cwd() })) });
   console.log(`triagent audit task ${result.taskId}: ${result.status}`);
 }
 
@@ -412,6 +420,17 @@ function printConfigTable(config) {
       ["compliance_mode", config.complianceMode]
     ]
   );
+}
+
+function agentOptions(config, { dryRun = false } = {}) {
+  const codex = config.agents.codex_subagent || {};
+  return {
+    hermesCommand: config.agents.hermes?.command,
+    antCommand: config.agents.ant?.command,
+    codexCommand: codex.command,
+    codexSandbox: dryRun ? codex.dryRunSandbox || codex.sandbox : codex.sandbox,
+    codexApproval: codex.approval
+  };
 }
 
 function getConfigValue(config, key) {

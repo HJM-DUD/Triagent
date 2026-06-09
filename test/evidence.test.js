@@ -18,6 +18,17 @@ test("marks successful subagent output without evidence as needs_evidence", () =
   assert.equal(result.status, "needs_evidence");
 });
 
+test("requires evidence IDs from Codex subagent output", () => {
+  const result = evaluateEvidenceStatus({
+    agent: "codex_subagent",
+    exitCode: 0,
+    output: "I checked the project and it is fine.",
+    hasClarification: false
+  });
+
+  assert.equal(result.status, "needs_evidence");
+});
+
 test("does not override clarification or failed process statuses", () => {
   assert.equal(
     evaluateEvidenceStatus({

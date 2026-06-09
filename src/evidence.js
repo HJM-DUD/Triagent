@@ -19,5 +19,5 @@ export function evaluateEvidenceStatus({ agent, exitCode, output, hasClarificati
 }
 
 export function requiresEvidence(agent) {
-  return agent === "hermes" || agent === "ant";
+  return agent === "hermes" || agent === "ant" || agent === "codex_subagent";
 }
