@@ -52,6 +52,40 @@ test("marks task as needs_clarification when agent emits marker", async () => {
   }
 });
 
+test("ignores clarification markers that only appear in stderr logs", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "triagent-runner-"));
+  const dbPath = join(dir, "triagent.sqlite");
+  try {
+    const store = new TriagentStore(dbPath);
+    const fakeAgent = join(dir, "fake-agent.sh");
+    await writeFile(
+      fakeAgent,
+      "#!/bin/sh\necho '[NEED_CLARIFY]: <question>' >&2\necho '[E1] final answer is complete'\n",
+      "utf8"
+    );
+    await chmod(fakeAgent, 0o755);
+
+    const result = await runSingleAgent({
+      agent: "ant",
+      goal: "stderr contains documentation example",
+      store,
+      antCommand: fakeAgent
+    });
+
+    const verifyStore = new TriagentStore(dbPath);
+    const events = verifyStore.listEvents(result.taskId);
+
+    assert.equal(result.status, "succeeded");
+    assert.equal(verifyStore.getTask(result.taskId).status, "succeeded");
+    assert.equal(events.some((event) => event.stream === "clarify"), false);
+    verifyStore.close();
+  } finally {
+    await unlink(dbPath).catch(() => {});
+    await unlink(join(dir, "fake-agent.sh")).catch(() => {});
+    await rmdir(dir).catch(() => {});
+  }
+});
+
 test("marks successful subagent output without evidence IDs as needs_evidence", async () => {
   const dir = await mkdtemp(join(tmpdir(), "triagent-runner-"));
   const dbPath = join(dir, "triagent.sqlite");

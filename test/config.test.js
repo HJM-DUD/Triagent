@@ -60,8 +60,7 @@ test("loads schema v1 config with agents, routing, safety, and legacy defaults",
             enabled: true,
             command: "codex",
             sandbox: "read-only",
-            dryRunSandbox: "workspace-write",
-            approval: "never"
+            dryRunSandbox: "workspace-write"
           },
           hermes: { enabled: true, command: "hermes", model: "deepseek-v4-pro" },
           ant: { enabled: false, command: "agy" }

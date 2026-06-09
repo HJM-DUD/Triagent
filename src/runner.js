@@ -54,7 +54,6 @@ export async function runSingleAgent({
   antCommand,
   codexCommand,
   codexSandbox,
-  codexApproval,
   mode = "single",
   parentTaskId,
   meta = {},
@@ -77,8 +76,7 @@ export async function runSingleAgent({
     hermesCommand,
     antCommand: antCommand || (normalizedAgent === "ant" ? resolveAntigravityCommand() : undefined),
     codexCommand,
-    codexSandbox,
-    codexApproval
+    codexSandbox
   });
   const task = store.createTask({
     mode,
@@ -105,7 +103,7 @@ export async function runSingleAgent({
     taskId: task.id,
     agent: normalizedAgent,
     stream: "system",
-    content: `$ ${command.cmd} ${command.args.map(shellQuote).join(" ")}`
+    content: formatCommand(command)
   });
 
   const result = await spawnTrackedProcess({ task, command, cwd, store, agent: normalizedAgent });
@@ -126,7 +124,6 @@ export async function runAllDiscussion({
   antCommand,
   codexCommand,
   codexSandbox,
-  codexApproval,
   priority = 50,
   maxAttempts = 2,
   routeReason = "",
@@ -145,7 +142,6 @@ export async function runAllDiscussion({
       antCommand,
       codexCommand,
       codexSandbox,
-      codexApproval,
       priority,
       maxAttempts,
       routeReason,
@@ -193,16 +189,15 @@ export async function runAllDiscussion({
       hermesCommand,
       antCommand: phase.agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined,
       codexCommand,
-      codexSandbox,
-      codexApproval
+      codexSandbox
     });
     store.appendEvent({
       taskId: task.id,
       agent: phase.agent,
       stream: "system",
-      content: `$ ${command.cmd} ${command.args.map(shellQuote).join(" ")}`
+      content: formatCommand(command)
     });
-    const result = await spawnTrackedProcess({ task, command, cwd, store, agent: phase.agent });
+    const result = await spawnTrackedProcess({ task, command, cwd, store, agent: phase.agent, finishTask: false });
     if (result.status === "needs_clarification") {
       store.finishTask(task.id, { status: "needs_clarification", exitCode: 0 });
       publish("task", { ...task, status: "needs_clarification", exitCode: 0 });
@@ -233,7 +228,6 @@ export async function replyToTask({
   hermesCommand,
   codexCommand,
   codexSandbox,
-  codexApproval,
   fullContext = false
 }) {
   const task = store.getTask(taskId);
@@ -285,7 +279,6 @@ export async function replyToTask({
     hermesCommand,
     codexCommand,
     codexSandbox,
-    codexApproval,
     mode: "clarification",
     parentTaskId: taskId,
     meta: { clarify_count: String(nextCount) }
@@ -299,8 +292,7 @@ export async function runAudit({
   antCommand,
   hermesCommand,
   codexCommand,
-  codexSandbox,
-  codexApproval
+  codexSandbox
 }) {
   const task = store.getTask(taskId);
   if (!task) {
@@ -323,7 +315,6 @@ export async function runAudit({
     hermesCommand,
     codexCommand,
     codexSandbox,
-    codexApproval,
     mode: "audit",
     parentTaskId: taskId
   });
@@ -339,7 +330,6 @@ export async function runDryRunAgent({
   hermesCommand,
   codexCommand,
   codexSandbox,
-  codexApproval,
   tokenSaveMode = true,
   prefilterMaxChars = 800,
   complianceMode = "block"
@@ -363,7 +353,6 @@ export async function runDryRunAgent({
       antCommand,
       codexCommand,
       codexSandbox: codexSandbox || "workspace-write",
-      codexApproval
     });
   }
   const packet = buildDryRunTaskPacket({ goal, realCwd: cwd, sandboxCwd: resolvedSandboxCwd });
@@ -378,7 +367,6 @@ export async function runDryRunAgent({
     hermesCommand,
     codexCommand,
     codexSandbox: codexSandbox || "workspace-write",
-    codexApproval,
     edit: normalizeAgentName(agent) === "codex_subagent",
     mode: "dry-run",
     meta: {
@@ -388,18 +376,19 @@ export async function runDryRunAgent({
   });
 }
 
-async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
+async function spawnTrackedProcess({ task, command, cwd, store, agent, finishTask = true }) {
   return new Promise((resolve) => {
     let combinedOutput = "";
+    let stdoutOutput = "";
     let child;
     try {
       child = spawn(command.cmd, command.args, {
         cwd,
-        env: process.env,
+        env: { ...process.env, ...(command.env || {}) },
         stdio: ["ignore", "pipe", "pipe"]
       });
     } catch (error) {
-      recordProcessError({ task, store, agent, error });
+      recordProcessError({ task, store, agent, error, finishTask });
       resolve({ taskId: task.id, status: "failed", exitCode: 1 });
       return;
     }
@@ -407,6 +396,7 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
     child.stdout.on("data", (chunk) => {
       const content = chunk.toString();
       combinedOutput += content;
+      stdoutOutput += content;
       store.appendEvent({ taskId: task.id, agent, stream: "stdout", content });
       publish("event", { taskId: task.id });
     });
@@ -419,12 +409,12 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
     });
 
     child.on("error", (error) => {
-      recordProcessError({ task, store, agent, error });
+      recordProcessError({ task, store, agent, error, finishTask });
       resolve({ taskId: task.id, status: "failed", exitCode: 1 });
     });
 
     child.on("close", (code) => {
-      const clarification = parseClarificationRequest(combinedOutput);
+      const clarification = parseClarificationRequest(stdoutOutput);
       const evaluation = evaluateEvidenceStatus({
         agent,
         exitCode: code ?? 1,
@@ -449,8 +439,10 @@ async function spawnTrackedProcess({ task, command, cwd, store, agent }) {
           content: "Missing evidence IDs in successful subagent output. Codex review is required before accepting this result."
         });
       }
-      store.finishTask(task.id, { status, exitCode: code ?? 1 });
-      publish("task", { ...task, status, exitCode: code ?? 1 });
+      if (finishTask) {
+        store.finishTask(task.id, { status, exitCode: code ?? 1 });
+        publish("task", { ...task, status, exitCode: code ?? 1 });
+      }
       resolve({ taskId: task.id, status, exitCode: code ?? 1, output: combinedOutput });
     });
   });
@@ -468,7 +460,6 @@ async function runTokenSaveDiscussion({
   antCommand,
   codexCommand,
   codexSandbox,
-  codexApproval,
   priority = 50,
   maxAttempts = 2,
   routeReason = "",
@@ -511,8 +502,7 @@ async function runTokenSaveDiscussion({
     hermesCommand,
     antCommand,
     codexCommand,
-    codexSandbox,
-    codexApproval
+    codexSandbox
   });
   if (shouldStopPhase({ result: prefilter, task, store })) {
     return finishStoppedPhase({ result: prefilter, task, store });
@@ -531,8 +521,7 @@ async function runTokenSaveDiscussion({
     hermesCommand,
     antCommand,
     codexCommand,
-    codexSandbox,
-    codexApproval
+    codexSandbox
   });
   if (shouldStopPhase({ result: codexReview, task, store })) {
     return finishStoppedPhase({ result: codexReview, task, store });
@@ -550,8 +539,7 @@ async function runTokenSaveDiscussion({
     hermesCommand,
     antCommand,
     codexCommand,
-    codexSandbox,
-    codexApproval
+    codexSandbox
   });
   if (shouldStopPhase({ result: alternative, task, store })) {
     return finishStoppedPhase({ result: alternative, task, store });
@@ -573,8 +561,7 @@ async function runTokenSaveDiscussion({
     hermesCommand,
     antCommand,
     codexCommand,
-    codexSandbox,
-    codexApproval
+    codexSandbox
   });
   if (shouldStopPhase({ result: proposal, task, store })) {
     return finishStoppedPhase({ result: proposal, task, store });
@@ -592,8 +579,7 @@ async function runTokenSaveDiscussion({
     hermesCommand,
     antCommand,
     codexCommand,
-    codexSandbox,
-    codexApproval
+    codexSandbox
   });
   if (shouldStopPhase({ result: compliance, task, store })) {
     return finishStoppedPhase({ result: compliance, task, store });
@@ -623,8 +609,7 @@ async function runTaskPhase({
   hermesCommand,
   antCommand,
   codexCommand,
-  codexSandbox,
-  codexApproval
+  codexSandbox
 }) {
   assertSafeTaskPacket(taskPacket);
   store.appendEvent({
@@ -642,16 +627,15 @@ async function runTaskPhase({
     hermesCommand,
     antCommand: agent === "ant" ? antCommand || resolveAntigravityCommand() : undefined,
     codexCommand,
-    codexSandbox,
-    codexApproval
+    codexSandbox
   });
   store.appendEvent({
     taskId: task.id,
     agent,
     stream: "system",
-    content: `$ ${command.cmd} ${command.args.map(shellQuote).join(" ")}`
+    content: formatCommand(command)
   });
-  return spawnTrackedProcess({ task, command, cwd, store, agent });
+  return spawnTrackedProcess({ task, command, cwd, store, agent, finishTask: false });
 }
 
 function shouldStopPhase({ result }) {
@@ -665,20 +649,27 @@ function finishStoppedPhase({ result, task, store }) {
   return { taskId: task.id, status: result.status };
 }
 
-function recordProcessError({ task, store, agent, error }) {
+function recordProcessError({ task, store, agent, error, finishTask = true }) {
   store.appendEvent({
     taskId: task.id,
     agent,
     stream: "stderr",
     content: error.message
   });
-  store.finishTask(task.id, { status: "failed", exitCode: 1 });
   publish("event", { taskId: task.id });
-  publish("task", { ...task, status: "failed", exitCode: 1 });
+  if (finishTask) {
+    store.finishTask(task.id, { status: "failed", exitCode: 1 });
+    publish("task", { ...task, status: "failed", exitCode: 1 });
+  }
 }
 
 function firstLine(value) {
   return String(value || "Untitled task").split("\n")[0].slice(0, 120);
+}
+
+function formatCommand(command) {
+  const env = Object.entries(command.env || {}).map(([key, value]) => `${key}=${shellQuote(value)}`);
+  return `$ ${[...env, command.cmd, ...command.args].map(shellQuote).join(" ")}`;
 }
 
 function shellQuote(value) {

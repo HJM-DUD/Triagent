@@ -37,25 +37,23 @@ test("builds Antigravity command using detected command name", () => {
   assert.deepEqual(command.args, ["--print", "Goal: review design"]);
 });
 
-test("builds Codex subagent command with cwd, sandbox, and non-interactive approval", () => {
+test("builds Codex subagent command with cwd and sandbox", () => {
   const command = buildAgentCommand({
     agent: "codex_subagent",
     taskPacket: "Goal: inspect project",
     cwd: "/tmp/project",
     codexCommand: "codex",
-    codexSandbox: "read-only",
-    codexApproval: "never"
+    codexSandbox: "read-only"
   });
 
   assert.equal(command.cmd, "codex");
+  assert.deepEqual(command.env, { RUST_LOG: "off" });
   assert.deepEqual(command.args, [
     "exec",
     "--cd",
     "/tmp/project",
     "--sandbox",
     "read-only",
-    "--ask-for-approval",
-    "never",
     "--color",
     "never",
     "Goal: inspect project"

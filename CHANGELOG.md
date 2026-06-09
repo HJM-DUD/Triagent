@@ -2,6 +2,19 @@
 
 All notable Triagent version changes are recorded here. Before any future release or Git tag, update this file first.
 
+## 0.5.1 - 2026-06-10
+
+### Fixed
+- Removed the deprecated `--ask-for-approval never` argument from Codex subagent invocations for compatibility with `codex-cli 0.137.0`.
+- Prevented `/all` phase subprocesses from marking the parent task complete before the full multi-agent flow finishes.
+- Limited `[NEED_CLARIFY]` detection to agent stdout so examples in logs, docs, or tool output do not falsely mark tasks as needing clarification.
+- Suppressed noisy Codex subagent Rust WARN logs by default with `RUST_LOG=off`, while keeping an override via `TRIAGENT_CODEX_RUST_LOG`.
+
+### Tests
+- Verified `/so` Codex subagent smoke tasks complete successfully without deprecated CLI arguments.
+- Verified `/all` reaches Codex subagent phases without stale subprocesses and keeps the parent task running until the multi-agent flow finishes.
+- Verified Codex subagent logs no longer include noisy plugin/skill WARN lines such as `codex_core_skills::loader` and `codex_core_plugins::manifest`.
+
 ## 0.5.0 - 2026-06-09
 
 ### Added

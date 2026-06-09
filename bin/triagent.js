@@ -428,8 +428,7 @@ function agentOptions(config, { dryRun = false } = {}) {
     hermesCommand: config.agents.hermes?.command,
     antCommand: config.agents.ant?.command,
     codexCommand: codex.command,
-    codexSandbox: dryRun ? codex.dryRunSandbox || codex.sandbox : codex.sandbox,
-    codexApproval: codex.approval
+    codexSandbox: dryRun ? codex.dryRunSandbox || codex.sandbox : codex.sandbox
   };
 }
 

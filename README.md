@@ -53,8 +53,10 @@ agy --print "<task packet>"
 Codex subagent is invoked by Triagent through:
 
 ```bash
-codex exec --cd "<cwd>" --sandbox read-only --ask-for-approval never --color never "<task packet>"
+RUST_LOG=off codex exec --cd "<cwd>" --sandbox read-only --color never "<task packet>"
 ```
+
+Triagent sets `RUST_LOG=off` only for Codex subagent child processes so Codex CLI plugin and skill loader warnings do not flood task logs. Set `TRIAGENT_CODEX_RUST_LOG=<value>` before running Triagent to override this default for debugging.
 
 Inside the interactive Antigravity CLI, use `/model` to switch models and `/usage` to inspect available models, quota, rate limits, and remaining free/paid package percentage before choosing a model.
 
@@ -82,7 +84,7 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - SQLite uses WAL mode, a longer busy timeout, write retries, and log chunking to reduce dashboard crashes while `/all` is writing logs.
 - `triagent.config.json` supports the legacy `token_save_mode`, `prefilter_max_chars`, and `compliance_mode` keys, plus the 0.5.0 schema with defaults, agent commands, routing prefixes/rules, and safety switches.
 
-Example 0.5.0 config:
+Example schema v1 config:
 
 ```json
 {
@@ -101,8 +103,7 @@ Example 0.5.0 config:
       "enabled": true,
       "command": "codex",
       "sandbox": "read-only",
-      "dryRunSandbox": "workspace-write",
-      "approval": "never"
+      "dryRunSandbox": "workspace-write"
     },
     "hermes": { "enabled": true, "command": "hermes", "model": "deepseek-v4-pro" },
     "ant": { "enabled": true, "command": "agy" }
@@ -156,6 +157,13 @@ Example 0.5.0 config:
 - Default `/all` now includes Hermes pre-filter, Codex subagent engineering review, Antigravity alternative, Hermes joint proposal, Codex subagent compliance check, then lead Codex review.
 - Legacy `/all` also runs Codex subagent phases instead of recording no-op Codex placeholders.
 - Codex subagent output must include evidence IDs just like Hermes and Antigravity.
+
+## Version 0.5.1 Codex CLI Compatibility
+
+- Codex subagent commands no longer pass the deprecated `--ask-for-approval never` argument, matching `codex-cli 0.137.0`.
+- `/all` phase subprocesses no longer mark the parent task complete before the full multi-agent flow finishes.
+- Clarification detection now reads the final agent stdout only, so `[NEED_CLARIFY]` examples in stderr logs or tool output do not falsely mark tasks as `needs_clarification`.
+- Codex subagent child processes default to `RUST_LOG=off` to suppress noisy plugin and skill loader WARN lines. Use `TRIAGENT_CODEX_RUST_LOG` when debugging Codex CLI internals.
 
 ## Version 0.3.1 Stability Fixes
 

@@ -36,7 +36,7 @@ Core commands:
 - `triagent run so -- "<task packet>"`: record and start the Codex subagent through `codex exec`.
 - `triagent run hermes -- "<task packet>"`: record and start Hermes.
 - `triagent run ant -- "<task packet>"`: record and start Antigravity; current backend command is `agy --print`.
-- `triagent run all -- "<goal>"`: default 0.5.0 token-saving flow: Hermes prefilter, Codex subagent engineering review, Antigravity alternate view, Hermes joint proposal, Codex subagent compliance check, Codex final decision.
+- `triagent run all -- "<goal>"`: default token-saving flow: Hermes prefilter, Codex subagent engineering review, Antigravity alternate view, Hermes joint proposal, Codex subagent compliance check, Codex final decision.
 - `triagent run all --legacy -- "<goal>"`: old 0.3.1 seven-stage discussion flow.
 - `triagent run all --no-token-save -- "<goal>"`: disable token-saving flow for this run.
 - `triagent reply --full-context <task-id> -- "<reply>"`: use the older full-context packet for clarification continuation.
@@ -45,7 +45,7 @@ Core commands:
 
 Direct agent commands when needed:
 
-- Codex subagent: `codex exec --cd "<cwd>" --sandbox read-only --ask-for-approval never --color never "<task packet>"`
+- Codex subagent: `RUST_LOG=off codex exec --cd "<cwd>" --sandbox read-only --color never "<task packet>"`; set `TRIAGENT_CODEX_RUST_LOG=<value>` only when debugging Codex CLI internals.
 - Hermes: `hermes -z "<task packet>" --provider deepseek --model deepseek-v4-pro`
 - Antigravity: `agy --print "<task packet>"`
 

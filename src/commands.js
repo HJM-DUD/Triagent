@@ -35,8 +35,7 @@ export function buildAgentCommand({
   antCommand,
   hermesCommand,
   codexCommand,
-  codexSandbox,
-  codexApproval = "never"
+  codexSandbox
 }) {
   const normalizedAgent = normalizeAgentName(agent);
   if (normalizedAgent === "hermes") {
@@ -75,14 +74,15 @@ export function buildAgentCommand({
   if (normalizedAgent === "codex_subagent") {
     return {
       cmd: codexCommand || "codex",
+      env: {
+        RUST_LOG: process.env.TRIAGENT_CODEX_RUST_LOG || "off"
+      },
       args: [
         "exec",
         "--cd",
         cwd,
         "--sandbox",
         codexSandbox || (edit ? "workspace-write" : "read-only"),
-        "--ask-for-approval",
-        codexApproval,
         "--color",
         "never",
         taskPacket

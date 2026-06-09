@@ -20,8 +20,7 @@ const DEFAULT_CONFIG = {
       enabled: true,
       command: "codex",
       sandbox: "read-only",
-      dryRunSandbox: "workspace-write",
-      approval: "never"
+      dryRunSandbox: "workspace-write"
     },
     hermes: { enabled: true, command: "hermes", model: "deepseek-v4-pro" },
     ant: { enabled: true, command: "agy" }
