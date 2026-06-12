@@ -178,6 +178,9 @@ h3 {
   cursor: pointer;
   font-size: 13px;
   font-weight: 720;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
   transition:
     border-color var(--motion-fast) var(--ease),
     background var(--motion-fast) var(--ease);
@@ -410,14 +413,69 @@ h3 {
 .workspace {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.decision-panel {
+  flex: 0 0 auto;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  background: #151611;
+}
+
+.decision-header {
+  min-height: 58px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--panel);
+}
+
+.decision-header > div {
+  min-width: 0;
+}
+
+.decision-header h3 {
+  margin-top: 1px;
+  font-size: 15px;
+}
+
+.decision-meta {
+  margin-top: 5px;
+  color: var(--subtle);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.45;
+}
+
+.decision-note {
+  width: 100%;
+  min-height: 76px;
+  max-height: 176px;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border-left: 3px solid rgba(127, 176, 139, 0.5);
+  color: #f0efe6;
+  background: #11120e;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.68;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
 }
 
 .panes {
   display: grid;
   grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.28fr);
   gap: 1px;
+  flex: 1 1 auto;
   min-height: 0;
-  height: calc(100dvh - 193px);
+  height: auto;
   background: var(--line);
 }
 
@@ -681,6 +739,21 @@ h3 {
   .status {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .decision-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 14px;
+  }
+
+  .report-link {
+    width: 100%;
+  }
+
+  .decision-note {
+    max-height: 34dvh;
+    padding: 14px;
   }
 
   .metric-strip {

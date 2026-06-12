@@ -2,6 +2,15 @@
 
 All notable Triagent version changes are recorded here. Before any future release or Git tag, update this file first.
 
+## 0.5.2 - 2026-06-12
+
+### Added
+- Added a dashboard task-detail final-note panel that prefers existing `triagent note` / Codex note events.
+- Added a read-only dashboard report export link backed by the existing Markdown report builder.
+
+### Tests
+- Added dashboard assertions for final-note UI wiring and the report export endpoint.
+
 ## 0.5.1 - 2026-06-10
 
 ### Fixed

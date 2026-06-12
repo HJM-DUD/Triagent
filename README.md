@@ -8,7 +8,7 @@ Triagent is GuGU's local observer and wrapper for the Codex + Hermes + Antigravi
 - Codex subagent is the local Codex CLI worker, invoked by Triagent through `codex exec`.
 - Hermes is the local DeepSeek subagent.
 - Antigravity CLI is the Gemini subagent. The confirmed CLI command is `agy`.
-- The dashboard is read-only. It records task packets, raw CLI output, status, exit codes, and `/all` discussion phases. It does not call any model.
+- The dashboard is read-only. It records task packets, raw CLI output, Codex notes, status, exit codes, and `/all` discussion phases. It does not call any model.
 
 ## Commands
 
@@ -80,7 +80,7 @@ Known model choices include Gemini 3.5 Flash (Medium/High/Low), Gemini 3.1 Pro (
 - The project does not batch-delete log files.
 - Common secrets are redacted before logs are stored.
 - The dashboard auto-refreshes while open. New tasks and new output pulse briefly so GuGU can see fresh dialogue without manual refresh.
-- The dashboard frontend is static HTML/CSS/JS in `public/`. Version 0.4.0 uses a restrained local workspace visual style, bounded task stream, all-task toggle, date/time task stamps, route/risk/retry summary metrics, grouped raw-output reading blocks, and reduced-motion support.
+- The dashboard frontend is static HTML/CSS/JS in `public/`. Version 0.4.0 uses a restrained local workspace visual style, bounded task stream, all-task toggle, date/time task stamps, route/risk/retry summary metrics, a final-note detail panel, grouped raw-output reading blocks, report export, and reduced-motion support.
 - SQLite uses WAL mode, a longer busy timeout, write retries, and log chunking to reduce dashboard crashes while `/all` is writing logs.
 - `triagent.config.json` supports the legacy `token_save_mode`, `prefilter_max_chars`, and `compliance_mode` keys, plus the 0.5.0 schema with defaults, agent commands, routing prefixes/rules, and safety switches.
 
@@ -118,6 +118,12 @@ Example schema v1 config:
   }
 }
 ```
+
+## Version 0.5.2 Dashboard Final Notes
+
+- The dashboard task detail view now surfaces the latest Codex note as a dedicated final decision panel.
+- Task details include a read-only report export link backed by the existing Markdown report generator.
+- The default dashboard remains read-only; `--enable-actions` still only reveals the sandbox Apply command copy helper.
 
 ## Version 0.5.1 Codex CLI Compatibility
 

@@ -23,6 +23,21 @@ test("dashboard renders v0.4 local routing metadata with dedicated chips", async
   assert.match(app, /Codex subagent/);
 });
 
+test("dashboard surfaces codex notes and report export in task details", async () => {
+  const html = await readFile("public/index.html", "utf8");
+  const app = await readFile("public/app.js", "utf8");
+  const css = await readFile("public/dashboard.css", "utf8");
+
+  assert.match(html, /id="final-note"/);
+  assert.match(html, /id="report-link"/);
+  assert.match(app, /function updateFinalNote/);
+  assert.match(app, /function findLatestTriagentNote/);
+  assert.match(app, /latestCodexNote/);
+  assert.ok(app.includes("/api/tasks/${encodeURIComponent(task.id)}/report"));
+  assert.match(css, /\.decision-panel/);
+  assert.match(css, /\.decision-note/);
+});
+
 test("dashboard stylesheet avoids neon hero treatment and keeps dense tool layout", async () => {
   const html = await readFile("public/index.html", "utf8");
   const [, href] = html.match(/<link rel="stylesheet" href="\/([^"]+)">/) || [];

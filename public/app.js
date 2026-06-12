@@ -21,6 +21,9 @@ const selectedCwd = document.querySelector("#selected-cwd");
 const taskPacket = document.querySelector("#task-packet");
 const eventsEl = document.querySelector("#events");
 const applyCommand = document.querySelector("#apply-command");
+const finalNote = document.querySelector("#final-note");
+const finalNoteMeta = document.querySelector("#final-note-meta");
+const reportLink = document.querySelector("#report-link");
 
 connect();
 loadConfig();
@@ -169,6 +172,7 @@ async function renderEvents(taskId) {
   try {
     const response = await fetch(`/api/tasks/${taskId}/events`);
     const data = await response.json();
+    updateFinalNote(data.events);
     const nextText = data.events
       .map((item) => `[${item.createdAt}] ${item.agent}:${item.stream}\n${item.content}`)
       .join("\n\n");
@@ -250,7 +254,50 @@ function updateSelectedTaskView(task) {
   selectedAttempt.textContent = attemptLabel(task);
   selectedCwd.textContent = task.cwd || "-";
   taskPacket.textContent = task.taskPacket;
+  updateReportLink(task);
   updateActionVisibility(task);
+}
+
+function updateFinalNote(events) {
+  const note = findLatestTriagentNote(events);
+  if (!note) {
+    finalNote.textContent = "暂无 Codex note";
+    finalNote.classList.add("muted");
+    finalNoteMeta.textContent = "等待 triagent note";
+    return;
+  }
+
+  finalNote.textContent = note.content;
+  finalNote.classList.remove("muted");
+  finalNoteMeta.textContent = `${agentLabel(note.agent)} note / ${formatDateTime(note.createdAt)}`;
+}
+
+function findLatestTriagentNote(events) {
+  let latestNote;
+  let latestCodexNote;
+  for (const event of events) {
+    if (event.stream !== "note" || !String(event.content || "").trim()) {
+      continue;
+    }
+    latestNote = event;
+    if (event.agent === "codex") {
+      latestCodexNote = event;
+    }
+  }
+  return latestCodexNote || latestNote;
+}
+
+function updateReportLink(task) {
+  reportLink.hidden = !task?.id;
+  if (reportLink.hidden) {
+    return;
+  }
+  reportLink.href = `/api/tasks/${encodeURIComponent(task.id)}/report`;
+  reportLink.download = reportFilename(task.id);
+}
+
+function reportFilename(taskId) {
+  return `triagent-${String(taskId).replaceAll(/[^a-zA-Z0-9_-]/g, "_")}-report.md`;
 }
 
 function startAutoRefresh() {

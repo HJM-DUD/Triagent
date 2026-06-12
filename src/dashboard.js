@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 
 import { defaultDbPath } from "./paths.js";
+import { buildMarkdownReport } from "./report.js";
 import { bus, openStore } from "./runner.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
@@ -72,12 +73,41 @@ function routeRequest({ req, res, dbPath, enableActions }) {
     return;
   }
 
+  const reportMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/report$/);
+  if (reportMatch) {
+    const store = openStore(dbPath);
+    const taskId = reportMatch[1];
+    try {
+      if (!store.getTask(taskId)) {
+        sendJson(res, { error: `Task not found: ${taskId}` }, 404);
+        return;
+      }
+
+      const markdown = buildMarkdownReport({ store, taskId });
+      sendText(res, markdown, 200, {
+        "content-disposition": `attachment; filename="${reportFilename(taskId)}"`
+      });
+    } finally {
+      store.close();
+    }
+    return;
+  }
+
   serveStatic(url.pathname, res);
 }
 
 function sendJson(res, data, statusCode = 200) {
   res.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
+}
+
+function sendText(res, data, statusCode = 200, headers = {}) {
+  res.writeHead(statusCode, { "content-type": "text/markdown; charset=utf-8", ...headers });
+  res.end(data);
+}
+
+function reportFilename(taskId) {
+  return `triagent-${String(taskId).replaceAll(/[^a-zA-Z0-9_-]/g, "_")}-report.md`;
 }
 
 function serveStatic(pathname, res) {
